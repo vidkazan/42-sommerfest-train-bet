@@ -14,7 +14,7 @@ export type LiveLeaderboardEntry = {
   scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string;
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
 };
-export type GameHeaderViewProps = { eyebrow: string; title: string; description: string };
+export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
@@ -34,15 +34,21 @@ export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDur
 export type AdminActiveViewProps = { game: Game };
 
 export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps) {
-  return <section className="hero"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></section>;
+  return <section className="hero">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1><p>{description}</p></section>;
 }
 
 export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, usernameCheckLoading, usernameCheckError, onSelectTrain, onUsernameChange, onCheckUsername, onSubmit }: BetViewProps) {
   const [nameConfirmed, setNameConfirmed] = useState(false);
 
+  useEffect(() => {
+    if (!selectedTrainId) return;
+    document.querySelector(`[data-journey-id="${selectedTrainId}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedTrainId]);
+
   return <>
     {betSubmitted && <p className="notice">Your bet is confirmed. Follow the live progress below.</p>}
     {!betSubmitted && !nameConfirmed && <form className="bet-form bet-name-form" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setNameConfirmed(true); }}>
+      <p className="ds-text-medium">Enter your name to start.</p>
       <label className="field-label" htmlFor="username">Username</label>
       <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
       {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
@@ -56,7 +62,7 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
         {journeys.map((journey) => <JourneyCard key={journey.id} journey={journey} mode="public" selected={selectedTrainId === journey.id} disabled={betSubmitted} onSelect={(selectedJourney) => onSelectTrain(selectedJourney.id)} />)}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {selectedTrainId && <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={loading}>{loading ? "Submitting…" : "Confirm my bet"}</BadgeButton>}
+      {selectedTrainId && <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={loading}>{loading ? "Submitting…" : `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}`}</BadgeButton>}
     </form>}
   </>;
 }
@@ -70,10 +76,15 @@ function prioritizeCurrentBet(entries: LiveLeaderboardEntry[], currentParticipan
   });
 }
 
+function getUpdatedMinutesAgo(lastUpdatedAt: string | null) {
+  return lastUpdatedAt ? Math.max(0, Math.floor((Date.now() - new Date(lastUpdatedAt).getTime()) / 60_000)) : null;
+}
+
 export function LiveLeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LiveLeaderboardViewProps) {
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
+  const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="progress-view" aria-label="Live progress">
-    <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{lastUpdatedAt && <span>Last update: {new Date(lastUpdatedAt).toLocaleTimeString()}</span>}</div>
+    <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
       const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
       return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
@@ -83,8 +94,9 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
 
 export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LeaderboardViewProps) {
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
+  const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="leaderboard-view" aria-label="Leaderboard">
-    <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{lastUpdatedAt && <span>Last update: {new Date(lastUpdatedAt).toLocaleTimeString()}</span>}</div>
+    <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const rankVariant = entry.position === 1 ? "red" : entry.position === 2 ? "orange" : entry.position === 3 ? "yellow" : "secondary";
       const delay = entry.delaySeconds !== null && entry.delaySeconds !== undefined && entry.delaySeconds >= 0 ? `+${Math.round(entry.delaySeconds / 60)} min` : null;

@@ -325,7 +325,7 @@ function App() {
 
   return (
     <main className="app-shell public-shell">
-      <GameHeader eyebrow="42 Wolfsburg" title="Train Bet" description="Choose the regional train that will gain the most delay during its journey." />
+      <GameHeader title="Train Bet" description="Choose the regional train that will gain the most delay during its journey." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
           ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={setSelectedTrainId} liveEntries={leaderboard} />
@@ -346,7 +346,7 @@ function App() {
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}
         {publicView === "browse" && !loading && !error && game && journeys.length > 0 && (
           <>
-            <p>Choose your train.</p>
+            <p className="ds-text-medium">Choose the train you think will be least delayed.</p>
             <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={setSelectedTrainId} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}

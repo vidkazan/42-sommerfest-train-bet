@@ -52,7 +52,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .ds-status--success { background: color-mix(in srgb, #75b293 25%, transparent); color: #75b293; }
 .ds-status--danger { background: var(--ds-danger-surface); color: var(--ds-danger-soft); }
 .ds-status--muted { background: var(--ds-border-subtle); color: var(--ds-text-muted); }
-.field-label { display: block; font-size: var(--ds-font-label); font-weight: 700; margin-bottom: var(--ds-space-1); }
+.field-label { display: block; font-size: .75rem; font-weight: 700; margin-bottom: var(--ds-space-1); }
 .bet-form { display: grid; gap: var(--ds-space-2); }
 .bet-form input, .bet-form p { margin-bottom: 0; }
 .bet-form .ds-badge-button { background: var(--ds-accent-blue); margin-top: 0; }
@@ -132,4 +132,13 @@ button:disabled { cursor: wait; opacity: .6; }
 @keyframes celebrate { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-8px) rotate(2deg); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 @media (max-width: 560px) { .inline-form { flex-direction: column; } .inline-form button { width: 100%; } }
+@media (max-width: 799px) {
+  .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
+  .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
+  .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }
+  .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view { overflow: visible; }
+  .public-shell .bet-name-form { min-height: 0; }
+  .public-shell .bet-selection { flex: none; }
+  .public-shell .bet-selection__list { overflow: visible; }
+}
 @media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }

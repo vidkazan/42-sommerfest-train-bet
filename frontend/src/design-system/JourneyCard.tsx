@@ -49,7 +49,7 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
     : null;
   const selectable = (mode === "public" || mode === "leaderboard" || mode === "admin") && Boolean(onSelect || onToggle) && !isDisabled;
   const selectJourney = () => mode === "admin" ? onToggle?.(journey) : onSelect?.(journey);
-  return <article className={`journey-card ds-journey-card ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
+  return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
     {mode === "leaderboard" && <div className="ds-journey-card__labels">
       {isCurrentUser && <Badge variant="blue">My bet</Badge>}
       <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>#{position}</Badge> : <Badge variant="secondary">{position ? `#${position}` : "⏳"}</Badge>}</strong>

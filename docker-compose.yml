@@ -1,0 +1,53 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    working_dir: /app
+    command: npm run dev
+    environment:
+      PORT: 3001
+      DATABASE_PATH: /data/trainbet.sqlite
+      CACHE_TTL_SECONDS: 60
+      GAME_ADMIN_TOKEN: ${GAME_ADMIN_TOKEN:-development-admin-token}
+      # Local Proxyman debugging only; never enable this in production.
+      NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED:-0}
+      SESSION_SECRET: ${SESSION_SECRET:-development-session-secret}
+      MOTIS_BASE_URL: ${MOTIS_BASE_URL:-https://api.transitous.org}
+      EVENT_DATE: ${EVENT_DATE:-2026-08-09}
+      EVENT_TIMEZONE: Europe/Berlin
+      MAP_MIN: ${MAP_MIN:-52.0,10.0}
+      MAP_MAX: ${MAP_MAX:-52.8,11.0}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - sqlite_data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  frontend_node_modules:
+  backend_node_modules:
+  sqlite_data:

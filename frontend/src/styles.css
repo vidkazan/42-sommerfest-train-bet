@@ -1,0 +1,42 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #172033; background: #f4f7fb; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button { border: 0; border-radius: 999px; background: #2563eb; color: white; cursor: pointer; font: inherit; font-weight: 700; padding: .8rem 1.2rem; }
+.app-shell { display: grid; gap: 1rem; margin: 0 auto; max-width: 1100px; padding: 1rem; }
+.hero { padding: .75rem .25rem; }
+.eyebrow { color: #2563eb; font-size: .8rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+h1, h2, p { margin-top: 0; }
+h1 { font-size: clamp(2.5rem, 12vw, 5rem); line-height: .95; margin-bottom: 1rem; }
+.hero p:last-child { color: #5b6577; font-size: 1.1rem; max-width: 34rem; }
+.map-placeholder { align-items: center; background: linear-gradient(135deg, #dbeafe, #ecfeff); border: 1px solid #cbd5e1; border-radius: 1.25rem; display: flex; flex: 1; justify-content: center; min-height: 52vh; position: relative; }
+.train-map { border-radius: 1.25rem; height: 360px; overflow: hidden; width: 100%; }
+.train-marker { font-size: 3rem; }
+.map-label { bottom: 1rem; color: #64748b; left: 1rem; position: absolute; }
+.card { background: white; border: 1px solid #e2e8f0; border-radius: 1.25rem; box-shadow: 0 8px 30px #1720330d; padding: 1.25rem; }
+.card p { color: #64748b; }
+.view-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.view-tabs button.secondary { background: #e2e8f0; color: #172033; }
+.notice { background: #eff6ff; border-radius: .75rem; color: #1d4ed8; padding: .75rem; }
+.field-label { display: block; font-size: .9rem; font-weight: 700; margin-bottom: .4rem; }
+input { border: 1px solid #cbd5e1; border-radius: .75rem; display: block; font: inherit; margin-bottom: 1rem; padding: .8rem; width: 100%; }
+select { border: 1px solid #cbd5e1; border-radius: .75rem; display: block; font: inherit; margin-bottom: 1rem; padding: .8rem; width: 100%; }
+textarea { border: 1px solid #cbd5e1; border-radius: .75rem; display: block; font: inherit; margin-bottom: .35rem; padding: .8rem; resize: vertical; width: 100%; }
+.field-help { color: #64748b; font-size: .85rem; }
+.error { color: #b91c1c !important; }
+button:disabled { cursor: wait; opacity: .6; }
+.inline-form { align-items: start; display: flex; gap: .5rem; }
+.inline-form input { flex: 1; }
+.station-list, .selected-stations { display: grid; gap: .5rem; margin: 1rem 0; }
+.station-option { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: .75rem; color: #172033; display: grid; gap: .2rem; text-align: left; width: 100%; }
+.station-option.selected { background: #eff6ff; border-color: #2563eb; }
+.station-option span { color: #64748b; font-size: .8rem; }
+.station-chip { align-items: center; background: #dbeafe; border-radius: 999px; display: inline-flex; gap: .5rem; justify-content: space-between; padding: .45rem .7rem; }
+.station-chip button { background: transparent; color: #1d4ed8; padding: 0; }
+.journey-list { display: grid; gap: .65rem; }
+.journey-card { border: 1px solid #e2e8f0; border-radius: .85rem; display: grid; gap: .25rem; padding: .85rem; }
+.journey-card span { color: #64748b; font-size: .9rem; }
+.current-user { background: #eff6ff; border-radius: .5rem; font-weight: 700; padding: .25rem .4rem; }
+.winner-result { overflow: hidden; position: relative; }
+.confetti { animation: celebrate 1.8s ease-in-out infinite alternate; font-size: 1.8rem; letter-spacing: .4rem; padding: 1rem 0; text-align: center; }
+@keyframes celebrate { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-8px) rotate(2deg); } }
+@media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card { align-self: center; } }

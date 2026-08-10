@@ -13,7 +13,6 @@ export const config = {
   sessionSecret: optional("SESSION_SECRET", "development-secret"),
   adminToken: required("GAME_ADMIN_TOKEN"),
   motisBaseUrl: optional("MOTIS_BASE_URL", "https://api.transitous.org"),
-  eventDate: optional("EVENT_DATE", "2026-08-09"),
   eventTimezone: optional("EVENT_TIMEZONE", "Europe/Berlin"),
   cacheTtlSeconds: Number(optional("CACHE_TTL_SECONDS", "60")),
 };

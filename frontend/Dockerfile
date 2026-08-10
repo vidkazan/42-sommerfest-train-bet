@@ -6,3 +6,18 @@ RUN npm install
 FROM base AS development
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
+
+FROM base AS build
+ARG VITE_API_BASE_URL=http://localhost:3001
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+COPY tsconfig.json vite.config.ts index.html ./
+COPY src ./src
+RUN npm run build
+
+FROM node:22-bookworm-slim AS production
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/package*.json ./
+RUN npm install --omit=dev
+COPY --from=build /app/dist ./dist
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]

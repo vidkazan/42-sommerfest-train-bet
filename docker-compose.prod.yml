@@ -1,0 +1,32 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3001}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_started
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    environment:
+      PORT: 3001
+      DATABASE_PATH: /data/trainbet.sqlite
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
+      GAME_ADMIN_TOKEN: ${GAME_ADMIN_TOKEN:?GAME_ADMIN_TOKEN is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      MOTIS_BASE_URL: ${MOTIS_BASE_URL:-https://api.transitous.org}
+      EVENT_TIMEZONE: ${EVENT_TIMEZONE:-Europe/Berlin}
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    volumes:
+      - sqlite_data:/data
+
+volumes:
+  sqlite_data:

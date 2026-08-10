@@ -290,7 +290,7 @@ app.post<{
 
   const body = request.body ?? {};
   const name = body.name?.trim() || "Sommerfest Train Bet";
-  const eventDate = body.eventDate?.trim() || config.eventDate;
+  const eventDate = body.eventDate?.trim() || "";
   const bettingStart = body.bettingStart?.trim() || `${eventDate}T17:00:00+02:00`;
   const bettingEnd = body.bettingEnd?.trim() || `${eventDate}T18:00:00+02:00`;
   const journeyDepartureStart = body.journeyDepartureStart?.trim() || `${eventDate}T17:00:00+02:00`;

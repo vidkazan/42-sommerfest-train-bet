@@ -12,7 +12,7 @@ const port = config.port;
 const databasePath = config.databasePath;
 const motisHeaders = {
   Accept: "application/json",
-  "User-Agent": "42SommerfestTrainBet/0.1",
+  "User-Agent": "42SommerfestTrainBet/0.1 (+https://github.com/vidkazan/42-sommerfest-train-bet)",
 };
 mkdirSync(dirname(databasePath), { recursive: true });
 

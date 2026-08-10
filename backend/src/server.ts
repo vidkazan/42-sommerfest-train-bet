@@ -648,16 +648,22 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
       origin, destination, scheduled_departure AS scheduledDeparture,
       scheduled_arrival AS scheduledArrival, duration_seconds AS durationSeconds,
       origin_stop_id AS originStopId, geometry, route_json AS routeJson,
-      status, realtime
+      status, realtime, actual_arrival AS actualArrival, delay_seconds AS delaySeconds,
+      live_status AS liveStatus, live_error AS liveError
     FROM game_journeys
     WHERE game_id = ? AND included = 1
     ORDER BY scheduled_departure ASC
   `).all(game.id);
   return { trains, lastUpdatedAt: null, stale: false };
 });
-type LiveTrip = { legs?: Array<{ to?: { arrival?: string; scheduledArrival?: string }; cancelled?: boolean }> };
+type LiveTrip = { legs?: Array<{
+  from?: { name?: string; lat?: number; lon?: number };
+  to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string };
+  legGeometry?: { points?: string };
+  cancelled?: boolean;
+}> };
 
-const fetchLiveTrip = async (tripId: string): Promise<{ actualArrival: string | null; arrived: boolean; cancelled: boolean }> => {
+const fetchLiveTrip = async (tripId: string): Promise<{ actualArrival: string | null; arrived: boolean; cancelled: boolean; geometry: string | null; endpoints: string | null }> => {
   const url = new URL("/api/v6/trip", config.motisBaseUrl);
   url.searchParams.set("tripId", tripId);
   const response = await fetch(url, { headers: motisHeaders });
@@ -666,7 +672,12 @@ const fetchLiveTrip = async (tripId: string): Promise<{ actualArrival: string | 
   const finalLeg = trip.legs?.at(-1);
   const arrival = finalLeg?.to?.arrival ?? null;
   const arrived = arrival !== null && Number.isFinite(Date.parse(arrival)) && Date.parse(arrival) <= Date.now();
-  return { actualArrival: arrival, arrived, cancelled: finalLeg?.cancelled === true };
+  const geometry = trip.legs?.map((leg) => leg.legGeometry?.points).filter((points): points is string => Boolean(points)) ?? [];
+  const firstLeg = trip.legs?.[0];
+  const endpoints = firstLeg?.from && finalLeg?.to
+    ? JSON.stringify([{ name: firstLeg.from.name, lat: firstLeg.from.lat, lon: firstLeg.from.lon }, { name: finalLeg.to.name, lat: finalLeg.to.lat, lon: finalLeg.to.lon }])
+    : null;
+  return { actualArrival: arrival, arrived, cancelled: finalLeg?.cancelled === true, geometry: geometry.length ? JSON.stringify(geometry) : null, endpoints };
 };
 
 let progressRefreshRunning = false;
@@ -677,26 +688,27 @@ const refreshProgress = async () => {
   progressRefreshRunning = true;
   const rows = db.prepare(`SELECT DISTINCT j.id, j.external_trip_id AS tripId,
     j.scheduled_arrival AS scheduledArrival, j.scheduled_departure AS scheduledDeparture
-    FROM game_journeys j JOIN bets b ON b.train_id = j.id
-    WHERE j.game_id = ? AND b.game_id = ? AND j.included = 1`)
-    .all(game.id, game.id) as Array<{ id: string; tripId: string; scheduledArrival: string; scheduledDeparture: string }>;
+    FROM game_journeys j
+    WHERE j.game_id = ? AND j.included = 1`)
+    .all(game.id) as Array<{ id: string; tripId: string; scheduledArrival: string; scheduledDeparture: string }>;
   const results = await Promise.allSettled(rows.map((row) => fetchLiveTrip(row.tripId)));
   const fetchedAt = new Date().toISOString();
   const updates = rows.map((row, index) => {
     const result = results[index];
-    if (result.status === "rejected") return { id: row.id, actualArrival: null, delaySeconds: null, status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
+    if (result.status === "rejected") return { id: row.id, actualArrival: null, delaySeconds: null, geometry: null, endpoints: null, status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
     const actualTimestamp = result.value.actualArrival ? Date.parse(result.value.actualArrival) : NaN;
     const scheduledTimestamp = Date.parse(row.scheduledArrival);
     const delaySeconds = Number.isFinite(actualTimestamp) && Number.isFinite(scheduledTimestamp)
       ? Math.round((actualTimestamp - scheduledTimestamp) / 1000) : null;
     const departureHasPassed = Number.isFinite(Date.parse(row.scheduledDeparture)) && Date.parse(row.scheduledDeparture) <= Date.now();
-    return { id: row.id, actualArrival: result.value.actualArrival, delaySeconds,
+    return { id: row.id, actualArrival: result.value.actualArrival, delaySeconds, geometry: result.value.geometry, endpoints: result.value.endpoints,
       status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : departureHasPassed ? "in_progress" : "waiting_for_departure", error: null };
   });
   db.transaction(() => {
     const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, delay_seconds = ?,
-      live_status = ?, last_live_update = ?, live_error = ? WHERE id = ? AND game_id = ?`);
-    for (const updateRow of updates) update.run(updateRow.actualArrival, updateRow.delaySeconds, updateRow.status, fetchedAt, updateRow.error, updateRow.id, game.id);
+      live_status = ?, last_live_update = ?, live_error = ?, geometry = COALESCE(?, geometry),
+      route_json = COALESCE(?, route_json) WHERE id = ? AND game_id = ?`);
+    for (const updateRow of updates) update.run(updateRow.actualArrival, updateRow.delaySeconds, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
   })();
   progressRefreshRunning = false;
 };
@@ -707,6 +719,7 @@ app.get<{ Querystring: { gameId?: string } }>("/api/progress", async (request, r
   const trains = db.prepare(`SELECT DISTINCT j.id, j.display_name AS displayName,
     j.scheduled_arrival AS scheduledArrival, j.actual_arrival AS actualArrival,
     j.delay_seconds AS delaySeconds, j.live_status AS status,
+    j.geometry, j.route_json AS routeJson,
     j.last_live_update AS lastUpdatedAt, j.live_error AS error
     FROM game_journeys j JOIN bets b ON b.train_id = j.id
     WHERE j.game_id = ? AND b.game_id = ? AND j.included = 1 ORDER BY j.scheduled_departure ASC`)

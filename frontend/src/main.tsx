@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { Fragment, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
@@ -25,11 +25,35 @@ function MapResizeHandler() {
   return null;
 }
 
-function TrainMap({ journeys, selectedTrainId, onSelect }: { journeys: Journey[]; selectedTrainId: string | null; onSelect: (id: string) => void }) {
+function decodePolyline(encoded: string): Array<{ lat: number; lon: number }> {
+  const points: Array<{ lat: number; lon: number }> = [];
+  let index = 0; let lat = 0; let lon = 0;
+  while (index < encoded.length) {
+    let shift = 0; let result = 0; let byte: number;
+    do { byte = encoded.charCodeAt(index++) - 63; result |= (byte & 31) << shift; shift += 5; } while (byte >= 32);
+    lat += (result & 1) ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do { byte = encoded.charCodeAt(index++) - 63; result |= (byte & 31) << shift; shift += 5; } while (byte >= 32);
+    lon += (result & 1) ? ~(result >> 1) : result >> 1;
+    points.push({ lat: lat / 1e6, lon: lon / 1e6 });
+  }
+  return points;
+}
+
+type ProgressTrain = { id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; delaySeconds: number | null; status: string; cancelled: boolean; stale: boolean; geometry?: string | null; routeJson?: string | null };
+
+function TrainMap({ journeys, selectedTrainId, onSelect, progressTrains }: { journeys: Journey[]; selectedTrainId: string | null; onSelect: (id: string) => void; progressTrains: ProgressTrain[] }) {
   const routes = journeys.map((journey) => {
-    let points: Array<{ lat: number; lon: number }> = [];
-    try { points = JSON.parse(journey.routeJson ?? "[]") as Array<{ lat: number; lon: number }>; } catch { /* ignore malformed route */ }
-    return { journey, points };
+    const live = progressTrains.find((train) => train.id === journey.id);
+    const geometry = live?.geometry ?? journey.geometry;
+    const routeJson = live?.routeJson ?? journey.routeJson;
+    let endpoints: Array<{ lat: number; lon: number }> = [];
+    try { endpoints = JSON.parse(routeJson ?? "[]") as Array<{ lat: number; lon: number }>; } catch { /* ignore malformed endpoints */ }
+    let encoded: string[] = [];
+    try { encoded = JSON.parse(geometry ?? "[]") as string[]; } catch { if (geometry) encoded = [geometry]; }
+    const points = encoded.flatMap(decodePolyline);
+    if (points.length < 2) endpoints = endpoints.length >= 2 ? [endpoints[0], endpoints[endpoints.length - 1]] : points;
+    return { journey, points, endpoints };
   }).filter((route) => route.points.length > 0);
   const allPoints = routes.flatMap((route) => route.points);
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
@@ -38,16 +62,28 @@ function TrainMap({ journeys, selectedTrainId, onSelect }: { journeys: Journey[]
     <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
       <MapResizeHandler />
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {routes.map(({ journey, points }) => {
+      {routes.map(({ journey, points, endpoints }) => {
         const positions = points.map((point) => [point.lat, point.lon] as LatLngExpression);
         const selected = journey.id === selectedTrainId;
+        const live = progressTrains.find((train) => train.id === journey.id);
+        const departure = Date.parse(journey.scheduledDeparture);
+        const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
+        const delaySeconds = live?.delaySeconds ?? journey.delaySeconds ?? null;
+        const cancelled = live?.cancelled ?? journey.liveStatus === "cancelled";
+        const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
+        const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
+        const markerPoint = points[Math.min(points.length - 1, Math.floor(progress * (points.length - 1)))];
         return (
-          <Polyline key={journey.id} positions={positions} pathOptions={{ color: selected ? "#e11d48" : "#2563eb", weight: selected ? 6 : 3, opacity: selected ? 1 : 0.65 }} eventHandlers={{ click: () => onSelect(journey.id) }}>
-            <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>
-          </Polyline>
+          <Fragment key={journey.id}>
+            <Polyline positions={positions} pathOptions={{ color: selected ? "#e11d48" : "#2563eb", weight: selected ? 6 : 3, opacity: selected ? 1 : 0.65 }} eventHandlers={{ click: () => onSelect(journey.id) }}>
+              <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>
+            </Polyline>
+            {endpoints.slice(0, 1).map((point) => <CircleMarker key={`${journey.id}-departure`} center={[point.lat, point.lon]} radius={6} pathOptions={{ color: "#16a34a", fillColor: "#fff", fillOpacity: 1 }}><Popup>Departure: {journey.origin}</Popup></CircleMarker>)}
+            {endpoints.slice(-1).map((point) => <CircleMarker key={`${journey.id}-arrival`} center={[point.lat, point.lon]} radius={6} pathOptions={{ color: "#7c3aed", fillColor: "#fff", fillOpacity: 1 }}><Popup>Arrival: {journey.destination}</Popup></CircleMarker>)}
+            {markerPoint && !cancelled && <CircleMarker center={[markerPoint.lat, markerPoint.lon]} radius={8} pathOptions={{ color: "#111827", fillColor: "#facc15", fillOpacity: 1 }}><Popup><strong>{journey.displayName}</strong><br />{delaySeconds === null || delaySeconds === undefined ? "Delay unavailable" : `${Math.round(delaySeconds / 60)} min delay`}</Popup></CircleMarker>}
+          </Fragment>
         );
       })}
-      {allPoints.map((point, index) => <CircleMarker key={`${point.lat}-${point.lon}-${index}`} center={[point.lat, point.lon]} radius={4} pathOptions={{ color: "#111827", fillColor: "#fff", fillOpacity: 1 }} />)}
     </MapContainer>
   );
 }
@@ -101,7 +137,7 @@ function App() {
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
   const [storedUserId, setStoredUserId] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{ trains: Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; delaySeconds: number | null; status: string; cancelled: boolean; stale: boolean }>; lastUpdatedAt: string | null; stale: boolean } | null>(null);
+  const [progress, setProgress] = useState<{ trains: ProgressTrain[]; lastUpdatedAt: string | null; stale: boolean } | null>(null);
   const [leaderboard, setLeaderboard] = useState<Array<{ participantId: string; username: string; position: number | null; delaySeconds: number | null; status: string }>>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] } | null>(null);
 
@@ -116,6 +152,19 @@ function App() {
         setError(reason instanceof Error ? reason.message : "Could not load the game");
       })
       .finally(() => setLoading(false));
+  }, [mode, publicGameId]);
+
+  useEffect(() => {
+    if (mode !== "public") return;
+    let active = true;
+    const refreshJourneys = async () => {
+      try {
+        const next = await api.getTrains(publicGameId ?? undefined);
+        if (active) setJourneys(next.trains);
+      } catch { /* retain the last successful journey snapshot */ }
+    };
+    const timer = window.setInterval(refreshJourneys, 60_000);
+    return () => { active = false; window.clearInterval(timer); };
   }, [mode, publicGameId]);
 
   useEffect(() => {
@@ -145,8 +194,8 @@ function App() {
     let active = true;
     const loadProgress = async () => {
       try {
-        const [nextProgress, nextLeaderboard] = await Promise.all([api.getProgress(publicGameId ?? undefined), api.getLeaderboard(publicGameId ?? undefined)]);
-        if (active) { setProgress(nextProgress); setLeaderboard(nextLeaderboard.entries); }
+        const [nextProgress, nextLeaderboard, nextJourneys] = await Promise.all([api.getProgress(publicGameId ?? undefined), api.getLeaderboard(publicGameId ?? undefined), api.getTrains(publicGameId ?? undefined)]);
+        if (active) { setProgress(nextProgress); setLeaderboard(nextLeaderboard.entries); setJourneys(nextJourneys.trains); }
       } catch { /* retain the last successful progress snapshot */ }
     };
     void loadProgress();
@@ -433,7 +482,7 @@ function App() {
       </section>
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMap journeys={journeys} selectedTrainId={selectedTrainId} onSelect={setSelectedTrainId} />
+          ? <TrainMap journeys={journeys} selectedTrainId={selectedTrainId} onSelect={setSelectedTrainId} progressTrains={progress?.trains ?? []} />
           : <div className="map-placeholder"><span className="train-marker">🚂</span><span className="map-label">Train map</span></div>}
       </section>
       <section className="card">

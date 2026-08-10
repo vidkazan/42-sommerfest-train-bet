@@ -862,7 +862,10 @@ app.post<{ Body: { username?: string; gameId?: string } }>("/api/participants", 
     return reply.code(409).send({ error: "USERNAME_UNAVAILABLE" });
   }
 
-  reply.setCookie("participant_id", id, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+  const forwardedHeader = request.headers["x-forwarded-proto"];
+  const forwardedProtocol = (Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader)?.split(",")[0]?.trim();
+  const requestProtocol = forwardedProtocol || request.protocol;
+  reply.setCookie("participant_id", id, { httpOnly: true, sameSite: "lax", secure: requestProtocol === "https", path: "/" });
   return { participantId: id, username };
 });
 

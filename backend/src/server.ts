@@ -739,20 +739,34 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
   const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
   if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
   const ranked = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId,
-      j.display_name AS displayName, j.delay_seconds AS delaySeconds, j.live_status AS status
+      j.display_name AS displayName, j.origin, j.destination, j.scheduled_departure AS scheduledDeparture,
+      j.scheduled_arrival AS scheduledArrival, j.duration_seconds AS durationSeconds,
+      j.actual_arrival AS actualArrival, j.delay_seconds AS delaySeconds, j.live_status AS status
     FROM bets b JOIN participants p ON p.id = b.participant_id
     JOIN game_journeys j ON j.id = b.train_id
     WHERE b.game_id = ? AND j.game_id = ? AND j.included = 1`)
-    .all(game.id, game.id) as Array<{ participantId: string; username: string; trainId: string; displayName: string; delaySeconds: number | null; status: string }>;
+    .all(game.id, game.id) as Array<{ participantId: string; username: string; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string }>;
   ranked.sort((a, b) => (b.delaySeconds ?? -Infinity) - (a.delaySeconds ?? -Infinity));
+  const trains = [...new Map(ranked.map((entry) => [entry.trainId, {
+    trainId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination,
+    scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds,
+    actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, status: entry.status,
+    bettors: [] as Array<{ participantId: string; username: string }>,
+  }])).values()];
+  for (const entry of ranked) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });
   let previousDelay: number | null = null;
   let position = 0;
-  const entries = ranked.map((entry, index) => {
+  const entries = trains.map((entry, index) => {
     if (entry.delaySeconds !== null && entry.delaySeconds !== previousDelay) position = index + 1;
     previousDelay = entry.delaySeconds;
     return { ...entry, position: entry.delaySeconds === null ? null : position };
   });
-  return { entries };
+  const lastUpdatedAt = db.prepare("SELECT MAX(last_live_update) AS value FROM game_journeys WHERE game_id = ?").get(game.id) as { value: string | null };
+  return {
+    entries: entries.map((entry) => ({ ...entry, cancelled: entry.status === "cancelled", stale: entry.status === "stale" })),
+    lastUpdatedAt: lastUpdatedAt.value,
+    stale: entries.some((entry) => entry.status === "stale"),
+  };
 });
 
 app.get<{ Querystring: { gameId?: string } }>("/api/results", async (request, reply) => {

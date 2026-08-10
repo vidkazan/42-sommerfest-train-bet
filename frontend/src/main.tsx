@@ -57,6 +57,8 @@ function App() {
   const [betSubmitted, setBetSubmitted] = useState(false);
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
+  const [usernameCheckLoading, setUsernameCheckLoading] = useState(false);
+  const [usernameCheckError, setUsernameCheckError] = useState<string | null>(null);
   const [storedUserId, setStoredUserId] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LiveLeaderboardEntry[]>([]);
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
@@ -157,6 +159,30 @@ function App() {
       setBetError(reason instanceof Error ? reason.message : "Could not submit bet");
     } finally {
       setBetLoading(false);
+    }
+  };
+
+  const checkUsername = async () => {
+    const normalizedUsername = username.trim();
+    setUsernameCheckError(null);
+    if (normalizedUsername.length < 2 || normalizedUsername.length > 24) {
+      setUsernameCheckError("Username must be between 2 and 24 characters.");
+      return false;
+    }
+    setUsername(normalizedUsername);
+    setUsernameCheckLoading(true);
+    try {
+      const result = await api.checkUsernameAvailability(normalizedUsername, publicGameId ?? "");
+      if (!result.available) {
+        setUsernameCheckError("This username is already taken.");
+        return false;
+      }
+      return true;
+    } catch (reason: unknown) {
+      setUsernameCheckError(reason instanceof Error ? reason.message : "Could not check username");
+      return false;
+    } finally {
+      setUsernameCheckLoading(false);
     }
   };
 
@@ -321,7 +347,7 @@ function App() {
         {publicView === "browse" && !loading && !error && game && journeys.length > 0 && (
           <>
             <p>Choose your train.</p>
-            <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} onSelectTrain={setSelectedTrainId} onUsernameChange={setUsername} onSubmit={submitBet} />
+            <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={setSelectedTrainId} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}
       </Card>

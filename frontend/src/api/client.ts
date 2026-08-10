@@ -106,6 +106,8 @@ export const api = {
   getLeaderboard: (gameId: string) => request<{ entries: Array<{ trainId: string; displayName: string; origin: string; destination: string; position: number | null; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string; cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }> }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/leaderboard?gameId=${encodeURIComponent(gameId)}`),
   getResults: (gameId: string) => request<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] }>(`/api/results?gameId=${encodeURIComponent(gameId)}`),
   getParticipantMe: (gameId: string) => request<{ participantId: string; username: string; trainId: string; hasBet: true }>(`/api/participants/me?gameId=${encodeURIComponent(gameId)}`),
+  checkUsernameAvailability: (username: string, gameId: string) =>
+    request<{ available: boolean }>(`/api/participants/availability?gameId=${encodeURIComponent(gameId)}&username=${encodeURIComponent(username)}`),
 
   createParticipant: (username: string, gameId: string) =>
     request<{ participantId: string; username: string }>("/api/participants", {

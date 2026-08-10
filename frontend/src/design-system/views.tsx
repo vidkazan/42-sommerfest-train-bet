@@ -16,7 +16,7 @@ export type LiveLeaderboardEntry = {
 };
 export type GameHeaderViewProps = { eyebrow: string; title: string; description: string };
 export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
-export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onSubmit: () => void };
+export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }> };
@@ -37,15 +37,16 @@ export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps)
   return <section className="hero"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></section>;
 }
 
-export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, onSelectTrain, onUsernameChange, onSubmit }: BetViewProps) {
+export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, usernameCheckLoading, usernameCheckError, onSelectTrain, onUsernameChange, onCheckUsername, onSubmit }: BetViewProps) {
   const [nameConfirmed, setNameConfirmed] = useState(false);
 
   return <>
     {betSubmitted && <p className="notice">Your bet is confirmed. Follow the live progress below.</p>}
-    {!betSubmitted && !nameConfirmed && <form className="bet-form bet-name-form" onSubmit={(event) => { event.preventDefault(); if (username.trim().length >= 2) setNameConfirmed(true); }}>
+    {!betSubmitted && !nameConfirmed && <form className="bet-form bet-name-form" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setNameConfirmed(true); }}>
       <label className="field-label" htmlFor="username">Username</label>
       <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
-      <BadgeButton type="submit" className="ds-text-huge">Next</BadgeButton>
+      {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
+      <BadgeButton type="submit" className="ds-text-huge" disabled={usernameCheckLoading}>{usernameCheckLoading ? "Checking…" : "Next"}</BadgeButton>
     </form>}
     {!betSubmitted && nameConfirmed && <form className="bet-selection" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
       <div className="bet-selection__header">

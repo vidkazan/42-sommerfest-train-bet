@@ -845,6 +845,20 @@ app.get("/api/trains/:id", async (request, reply) => {
   return reply.code(404).send({ error: "TRAIN_NOT_FOUND", id: (request.params as { id: string }).id });
 });
 
+app.get<{ Querystring: { gameId?: string; username?: string } }>("/api/participants/availability", async (request, reply) => {
+  const username = request.query.username?.trim();
+  if (!username || username.length < 2 || username.length > 24) {
+    return reply.code(400).send({ error: "INVALID_USERNAME" });
+  }
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
+
+  const participant = db.prepare("SELECT 1 FROM participants WHERE game_id = ? AND username = ? COLLATE NOCASE LIMIT 1")
+    .get(game.id, username);
+  return { available: !participant };
+});
+
 app.post<{ Body: { username?: string; gameId?: string } }>("/api/participants", async (request, reply) => {
   const username = request.body?.username?.trim();
   if (!username || username.length < 2 || username.length > 24) {

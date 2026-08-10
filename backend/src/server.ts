@@ -689,8 +689,9 @@ const refreshProgress = async () => {
     const scheduledTimestamp = Date.parse(row.scheduledArrival);
     const delaySeconds = Number.isFinite(actualTimestamp) && Number.isFinite(scheduledTimestamp)
       ? Math.round((actualTimestamp - scheduledTimestamp) / 1000) : null;
+    const departureHasPassed = Number.isFinite(Date.parse(row.scheduledDeparture)) && Date.parse(row.scheduledDeparture) <= Date.now();
     return { id: row.id, actualArrival: result.value.actualArrival, delaySeconds,
-      status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : "in_progress", error: null };
+      status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : departureHasPassed ? "in_progress" : "waiting_for_departure", error: null };
   });
   db.transaction(() => {
     const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, delay_seconds = ?,
@@ -752,7 +753,7 @@ app.get<{ Querystring: { gameId?: string } }>("/api/results", async (request, re
     .all(game.id, game.id) as Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; delaySeconds: number | null; status: string }>;
   const updates = trains.map((train) => ({ ...train, cancelled: train.status === "cancelled", stale: train.status === "stale" }));
   if (updates.length === 0) return { status: "pending", final: false, winners: [], trains: updates };
-  const final = updates.every((train) => train.cancelled || train.actualArrival !== null);
+  const final = updates.every((train) => train.status === "arrived" || train.status === "cancelled");
   if (!final) return { status: "pending", final: false, winners: [], trains: updates };
   const scored = updates.filter((train) => train.status === "arrived" && train.delaySeconds !== null);
   if (scored.length === 0) return { status: "no_winner", final: true, winners: [], trains: updates };

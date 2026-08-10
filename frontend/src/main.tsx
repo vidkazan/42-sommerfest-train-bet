@@ -450,11 +450,11 @@ function App() {
             <h3>Trains</h3>
             {!progress || progress.trains.length === 0 ? <p>No live train data yet.</p> : <div className="journey-list">{progress.trains.map((train) => <article className="journey-card" key={train.id}>
               <strong>{train.displayName}</strong>
-              <span>{train.cancelled ? "Cancelled — not ranked" : train.status === "arrived" && train.actualArrival ? `Arrived ${new Date(train.actualArrival).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "In transit"}</span>
+              <span>{train.cancelled ? "Cancelled — not ranked" : train.status === "waiting_for_departure" ? "Waiting for departure" : train.status === "arrived" && train.actualArrival ? `Arrived ${new Date(train.actualArrival).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "In transit"}</span>
               <span>{train.delaySeconds === null ? "Delay unavailable" : train.delaySeconds === 0 ? "On time" : `${train.delaySeconds > 0 ? "+" : "−"}${Math.round(Math.abs(train.delaySeconds) / 60)} min ${train.delaySeconds > 0 ? "delay" : "early"}`}{train.status === "in_progress" ? " · realtime estimate" : ""}{train.stale ? " · stale" : ""}</span>
             </article>)}</div>}
             <h3>Leaderboard</h3>
-            {leaderboard.length === 0 ? <p>No bets yet.</p> : <ol>{leaderboard.map((entry) => <li key={entry.participantId} className={entry.participantId === storedUserId ? "current-user" : undefined}><strong>{entry.participantId === storedUserId ? "You: " : ""}{entry.position ? `#${entry.position} ` : "⏳ "}{entry.username}</strong> · {entry.status === "waiting" ? "waiting for arrival" : entry.status === "cancelled" ? "cancelled" : `${Math.round((entry.delaySeconds ?? 0) / 60)} min delay`}</li>)}</ol>}
+            {leaderboard.length === 0 ? <p>No bets yet.</p> : <ol>{leaderboard.map((entry) => <li key={entry.participantId} className={entry.participantId === storedUserId ? "current-user" : undefined}><strong>{entry.position ? `#${entry.position} ` : "⏳ "}{entry.username}</strong> · {entry.status === "waiting" || entry.status === "waiting_for_departure" ? (entry.status === "waiting_for_departure" ? "waiting for departure" : "waiting for arrival") : entry.status === "cancelled" ? "cancelled" : `${Math.round((entry.delaySeconds ?? 0) / 60)} min delay`}</li>)}</ol>}
           </section>
         )}
         {publicView === "result" && !loading && !error && (

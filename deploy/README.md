@@ -32,4 +32,4 @@ Example cron entry:
 15 3 * * * cd /opt/trainbet && ./deploy/certbot-renew.sh >> /var/log/trainbet-certbot.log 2>&1
 ```
 
-Only Nginx is exposed publicly. Frontend and backend traffic stays inside the Compose network, and the frontend uses same-origin `/api` requests.
+The backend is also published on port 3001 for direct debugging/API access. For the HTTPS frontend, keep `VITE_API_BASE_URL` empty so browser requests use the secure same-origin `/api` route; direct `http://<VDS_IP>:3001` requests are only suitable when the frontend itself is served over HTTP.

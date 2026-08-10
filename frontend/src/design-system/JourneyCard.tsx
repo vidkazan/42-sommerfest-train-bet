@@ -1,5 +1,5 @@
 import type { Journey } from "../api/client";
-import { Badge, BadgeButton, TransportIcon } from "./components";
+import { Badge, TransportIcon } from "./components";
 import { JourneyHeaderView } from "./JourneyHeaderView";
 import { journeyToLeg, transportIconType } from "./journeyToLeg";
 import { JourneyProgressLine } from "./JourneyProgressLine";
@@ -37,21 +37,21 @@ export function journeyStatus(journey: Journey) {
   return null;
 }
 
-export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, showCheckbox = mode === "admin", actionLabel, position, bettors = [], currentParticipantId, onSelect, onToggle, className = "" }: JourneyCardProps) {
+export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, bettors = [], currentParticipantId, onSelect, onToggle, className = "" }: JourneyCardProps) {
   const leg = journeyToLeg(journey);
   const status = journeyStatus(journey);
   const isDisabled = disabled || (mode === "admin" && status?.blocked === true);
-  const label = actionLabel ?? (selected ? "Selected" : "Choose train");
   const isCurrentUser = bettors.some((bettor) => bettor.participantId === currentParticipantId);
   const rankBadge = position === 1 ? "red" : position === 2 ? "orange" : position === 3 ? "yellow" : null;
   const rankBadgeClass = position === 1 ? "ds-rank-badge--red" : position === 2 ? "ds-rank-badge--orange" : position === 3 ? "ds-rank-badge--yellow" : "";
   const delayBadge = journey.delaySeconds !== null && journey.delaySeconds !== undefined && journey.delaySeconds >= 0
     ? `+${Math.round(journey.delaySeconds / 60)} min`
     : null;
-  return <article className={`journey-card ds-journey-card ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined}>
-    {showCheckbox && <input className="ds-journey-cell__checkbox" type="checkbox" checked={selected} disabled={isDisabled} aria-label={`Select ${journey.displayName}`} onChange={() => onToggle?.(journey)} />}
+  const selectable = (mode === "public" || mode === "leaderboard" || mode === "admin") && Boolean(onSelect || onToggle) && !isDisabled;
+  const selectJourney = () => mode === "admin" ? onToggle?.(journey) : onSelect?.(journey);
+  return <article className={`journey-card ds-journey-card ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
     {mode === "leaderboard" && <div className="ds-journey-card__labels">
-      {isCurrentUser && <Badge variant="red">My bet</Badge>}
+      {isCurrentUser && <Badge variant="blue">My bet</Badge>}
       <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>#{position}</Badge> : <Badge variant="secondary">{position ? `#${position}` : "⏳"}</Badge>}</strong>
       {mode === "leaderboard" && delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
       {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
@@ -63,7 +63,5 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
       <strong>{leg.lineName}</strong>
       <JourneyProgressLine journey={journey} />
     </div>
-    {mode === "leaderboard" && bettors.length > 0 && <div className="ds-journey-card__bettors" aria-label="Players who selected this train">{bettors.map((bettor) => <span key={bettor.participantId}>{bettor.username}</span>)}</div>}
-    {mode === "public" && onSelect && <BadgeButton type="button" disabled={isDisabled} onClick={() => onSelect(journey)}>{label}</BadgeButton>}
   </article>;
 }

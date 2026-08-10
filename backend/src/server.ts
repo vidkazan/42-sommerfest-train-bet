@@ -21,15 +21,17 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS participants (
     id TEXT PRIMARY KEY,
     game_id TEXT,
-    username TEXT NOT NULL COLLATE NOCASE UNIQUE,
-    created_at TEXT NOT NULL
+    username TEXT NOT NULL COLLATE NOCASE,
+    created_at TEXT NOT NULL,
+    UNIQUE (game_id, username)
   );
   CREATE TABLE IF NOT EXISTS bets (
     id TEXT PRIMARY KEY,
     game_id TEXT,
-    participant_id TEXT NOT NULL UNIQUE REFERENCES participants(id),
+    participant_id TEXT NOT NULL REFERENCES participants(id),
     train_id TEXT NOT NULL,
-    submitted_at TEXT NOT NULL
+    submitted_at TEXT NOT NULL,
+    UNIQUE (game_id, participant_id)
   );
   CREATE TABLE IF NOT EXISTS games (
     id TEXT PRIMARY KEY,
@@ -85,6 +87,59 @@ db.exec(`
 const columns = (table: string) => new Set(
   (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name),
 );
+
+const participantIndexes = db.prepare("PRAGMA index_list(participants)").all() as Array<{ name: string; unique: number }>;
+const indexColumns = (indexName: string) => (db.prepare(`PRAGMA index_info(${indexName})`).all() as Array<{ name: string | null }>).map((column) => column.name).join(",");
+const hasPerGameUsernameIndex = participantIndexes.some((index) => index.unique === 1 && indexColumns(index.name) === "game_id,username");
+const betIndexes = db.prepare("PRAGMA index_list(bets)").all() as Array<{ name: string; unique: number }>;
+const hasPerGameBetIndex = betIndexes.some((index) => index.unique === 1 && indexColumns(index.name) === "game_id,participant_id");
+if (!hasPerGameUsernameIndex) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    ALTER TABLE participants RENAME TO participants_legacy;
+    CREATE TABLE participants (
+      id TEXT PRIMARY KEY,
+      game_id TEXT,
+      username TEXT NOT NULL COLLATE NOCASE,
+      created_at TEXT NOT NULL,
+      UNIQUE (game_id, username)
+    );
+    INSERT INTO participants (id, game_id, username, created_at)
+      SELECT id, game_id, username, created_at FROM participants_legacy;
+    ALTER TABLE bets RENAME TO bets_legacy;
+    CREATE TABLE bets (
+      id TEXT PRIMARY KEY,
+      game_id TEXT,
+      participant_id TEXT NOT NULL REFERENCES participants(id),
+      train_id TEXT NOT NULL,
+      submitted_at TEXT NOT NULL,
+      UNIQUE (game_id, participant_id)
+    );
+    INSERT INTO bets (id, game_id, participant_id, train_id, submitted_at)
+      SELECT id, game_id, participant_id, train_id, submitted_at FROM bets_legacy;
+    DROP TABLE bets_legacy;
+    DROP TABLE participants_legacy;
+    PRAGMA foreign_keys = ON;
+  `);
+}
+if (hasPerGameUsernameIndex && !hasPerGameBetIndex) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    ALTER TABLE bets RENAME TO bets_legacy;
+    CREATE TABLE bets (
+      id TEXT PRIMARY KEY,
+      game_id TEXT,
+      participant_id TEXT NOT NULL REFERENCES participants(id),
+      train_id TEXT NOT NULL,
+      submitted_at TEXT NOT NULL,
+      UNIQUE (game_id, participant_id)
+    );
+    INSERT INTO bets (id, game_id, participant_id, train_id, submitted_at)
+      SELECT id, game_id, participant_id, train_id, submitted_at FROM bets_legacy;
+    DROP TABLE bets_legacy;
+    PRAGMA foreign_keys = ON;
+  `);
+}
 
 if (!columns("participants").has("game_id")) {
   db.exec("ALTER TABLE participants ADD COLUMN game_id TEXT REFERENCES games(id)");
@@ -289,7 +344,7 @@ app.post<{
   if (!requireAdmin(request, reply)) return;
 
   const body = request.body ?? {};
-  const name = body.name?.trim() || "Sommerfest Train Bet";
+  const name = body.name?.trim() || "Train Bet";
   const eventDate = body.eventDate?.trim() || "";
   const bettingStart = body.bettingStart?.trim() || `${eventDate}T17:00:00+02:00`;
   const bettingEnd = body.bettingEnd?.trim() || `${eventDate}T18:00:00+02:00`;
@@ -522,10 +577,6 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/confirm", async (requ
     .get(game.id) as { count: number };
   if (selected.count < 1) return reply.code(400).send({ error: "NO_JOURNEYS_SELECTED" });
 
-  const existingActive = db.prepare("SELECT id FROM games WHERE status IN ('active', 'open') AND id != ? LIMIT 1")
-    .get(game.id) as { id: string } | undefined;
-  if (existingActive) return reply.code(409).send({ error: "ACTIVE_GAME_EXISTS" });
-
   const now = new Date().toISOString();
   const confirm = db.transaction(() => {
     db.prepare("UPDATE games SET status = 'active', activated_at = ?, updated_at = ? WHERE id = ?")
@@ -591,10 +642,7 @@ app.get<{ Querystring: { text?: string } }>("/api/admin/stations/search", async 
   }
 });
 
-const getActiveGame = () => db.prepare(`
-  SELECT id, name, event_date, timezone, betting_start, betting_end, status
-  FROM games WHERE status = 'active' LIMIT 1
-`).get() as {
+type GameRow = {
   id: string;
   name: string;
   event_date: string;
@@ -602,7 +650,7 @@ const getActiveGame = () => db.prepare(`
   betting_start: string;
   betting_end: string;
   status: string;
-} | undefined;
+};
 
 const getGameById = (id: string) => db.prepare(`
   SELECT id, name, event_date, timezone, betting_start, betting_end, status
@@ -623,25 +671,10 @@ app.get<{ Params: { id: string } }>("/api/games/:id", async (request, reply) => 
   return { game: { id: game.id, name: game.name, eventDate: game.event_date, timezone: game.timezone, bettingStart: game.betting_start, bettingEnd: game.betting_end, status: game.status } };
 });
 
-app.get("/api/games/active", async (_request, reply) => {
-  const game = getActiveGame();
-  if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
-  return {
-    game: {
-      id: game.id,
-      name: game.name,
-      eventDate: game.event_date,
-      timezone: game.timezone,
-      bettingStart: game.betting_start,
-      bettingEnd: game.betting_end,
-      status: game.status,
-    },
-  };
-});
-
 app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, reply) => {
-  const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
-  if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
 
   const trains = db.prepare(`
     SELECT id, external_trip_id AS externalTripId, display_name AS displayName,
@@ -682,10 +715,7 @@ const fetchLiveTrip = async (tripId: string): Promise<{ actualArrival: string | 
 
 let progressRefreshRunning = false;
 
-const refreshProgress = async () => {
-  const game = getActiveGame();
-  if (!game || progressRefreshRunning) return;
-  progressRefreshRunning = true;
+const refreshGameProgress = async (game: GameRow) => {
   const rows = db.prepare(`SELECT DISTINCT j.id, j.external_trip_id AS tripId,
     j.scheduled_arrival AS scheduledArrival, j.scheduled_departure AS scheduledDeparture
     FROM game_journeys j
@@ -710,12 +740,27 @@ const refreshProgress = async () => {
       route_json = COALESCE(?, route_json) WHERE id = ? AND game_id = ?`);
     for (const updateRow of updates) update.run(updateRow.actualArrival, updateRow.delaySeconds, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
   })();
-  progressRefreshRunning = false;
+};
+
+const refreshProgress = async () => {
+  if (progressRefreshRunning) return;
+  const games = db.prepare(`
+    SELECT id, name, event_date, timezone, betting_start, betting_end, status
+    FROM games WHERE status = 'active'
+  `).all() as GameRow[];
+  if (!games.length) return;
+  progressRefreshRunning = true;
+  try {
+    await Promise.allSettled(games.map((game) => refreshGameProgress(game)));
+  } finally {
+    progressRefreshRunning = false;
+  }
 };
 
 app.get<{ Querystring: { gameId?: string } }>("/api/progress", async (request, reply) => {
-  const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
-  if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const trains = db.prepare(`SELECT DISTINCT j.id, j.display_name AS displayName,
     j.scheduled_arrival AS scheduledArrival, j.actual_arrival AS actualArrival,
     j.delay_seconds AS delaySeconds, j.live_status AS status,
@@ -736,8 +781,9 @@ app.get<{ Querystring: { gameId?: string } }>("/api/progress", async (request, r
 setInterval(() => { void refreshProgress(); }, config.cacheTtlSeconds * 1000);
 void refreshProgress();
 app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request, reply) => {
-  const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
-  if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const ranked = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId,
       j.display_name AS displayName, j.origin, j.destination, j.scheduled_departure AS scheduledDeparture,
       j.scheduled_arrival AS scheduledArrival, j.duration_seconds AS durationSeconds,
@@ -770,8 +816,9 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
 });
 
 app.get<{ Querystring: { gameId?: string } }>("/api/results", async (request, reply) => {
-  const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
-  if (!game) return reply.code(404).send({ error: "ACTIVE_GAME_NOT_FOUND" });
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const trains = db.prepare(`SELECT DISTINCT j.id, j.display_name AS displayName,
       j.scheduled_arrival AS scheduledArrival, j.actual_arrival AS actualArrival,
       j.delay_seconds AS delaySeconds, j.live_status AS status FROM game_journeys j
@@ -805,7 +852,8 @@ app.post<{ Body: { username?: string; gameId?: string } }>("/api/participants", 
   }
 
   const id = crypto.randomUUID();
-  const activeGame = request.body?.gameId ? getPublicGame(request.body.gameId) : getActiveGame();
+  if (!request.body?.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const activeGame = getPublicGame(request.body.gameId);
   if (!activeGame) return reply.code(409).send({ error: "GAME_NOT_AVAILABLE" });
   try {
     db.prepare("INSERT INTO participants (id, game_id, username, created_at) VALUES (?, ?, ?, ?)")
@@ -820,7 +868,8 @@ app.post<{ Body: { username?: string; gameId?: string } }>("/api/participants", 
 
 app.get<{ Querystring: { gameId?: string } }>("/api/participants/me", async (request, reply) => {
   const participantId = request.cookies.participant_id;
-  const game = request.query.gameId ? getPublicGame(request.query.gameId) : getActiveGame();
+  if (!request.query.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const game = getPublicGame(request.query.gameId);
   if (!participantId || !game) return reply.code(404).send({ error: "PARTICIPANT_NOT_FOUND" });
   const participant = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId
     FROM participants p JOIN bets b ON b.participant_id = p.id
@@ -835,12 +884,16 @@ app.post<{ Body: { trainId?: string; gameId?: string } }>("/api/bets", async (re
   const participantId = request.cookies.participant_id;
   const trainId = request.body?.trainId;
   if (!participantId || !trainId) return reply.code(400).send({ error: "PARTICIPANT_AND_TRAIN_REQUIRED" });
-  const activeGame = request.body?.gameId ? getPublicGame(request.body.gameId) : getActiveGame();
+  if (!request.body?.gameId) return reply.code(400).send({ error: "GAME_ID_REQUIRED" });
+  const activeGame = getPublicGame(request.body.gameId);
   if (!activeGame) return reply.code(409).send({ error: "GAME_NOT_AVAILABLE" });
   const train = db.prepare("SELECT 1 FROM game_journeys WHERE id = ? AND game_id = ? AND included = 1")
     .get(trainId, activeGame.id);
   if (!train) return reply.code(400).send({ error: "TRAIN_NOT_AVAILABLE" });
-  if (db.prepare("SELECT 1 FROM bets WHERE participant_id = ?").get(participantId)) {
+  if (!db.prepare("SELECT 1 FROM participants WHERE id = ? AND game_id = ?").get(participantId, activeGame.id)) {
+    return reply.code(409).send({ error: "PARTICIPANT_GAME_MISMATCH" });
+  }
+  if (db.prepare("SELECT 1 FROM bets WHERE participant_id = ? AND game_id = ?").get(participantId, activeGame.id)) {
     return reply.code(409).send({ error: "BET_ALREADY_SUBMITTED" });
   }
   db.prepare("INSERT INTO bets (id, game_id, participant_id, train_id, submitted_at) VALUES (?, ?, ?, ?, ?)")

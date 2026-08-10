@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { api, type Game, type Journey, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BetView, Button, Card, GameHeader, LiveLeaderboardView, Notice, ResultsView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveLeaderboardView, Notice, ResultsView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
@@ -23,7 +23,7 @@ function App() {
   const [stationResults, setStationResults] = useState<Station[]>([]);
   const [selectedStations, setSelectedStations] = useState<Station[]>([]);
   const [manualStationIds, setManualStationIds] = useState("");
-  const [gameName, setGameName] = useState("Sommerfest train bet");
+  const [gameName, setGameName] = useState("Train Bet");
   const [eventDate, setEventDate] = useState("2026-08-09");
   const [bettingStart, setBettingStart] = useState("17:00");
   const [bettingEnd, setBettingEnd] = useState("18:00");
@@ -65,7 +65,8 @@ function App() {
 
   useEffect(() => {
     if (mode !== "public") return;
-    Promise.all([publicGameId ? api.getGame(publicGameId) : api.getActiveGame(), api.getTrains(publicGameId ?? undefined)])
+    if (!publicGameId) return;
+    Promise.all([api.getGame(publicGameId), api.getTrains(publicGameId)])
       .then(([activeGame, trains]) => {
         setGame(activeGame.game);
         setJourneys(trains.trains);
@@ -81,7 +82,7 @@ function App() {
     let active = true;
     const refreshJourneys = async () => {
       try {
-        const next = await api.getTrains(publicGameId ?? undefined);
+        const next = await api.getTrains(publicGameId ?? "");
         if (active) setJourneys(next.trains);
       } catch { /* retain the last successful journey snapshot */ }
     };
@@ -97,7 +98,7 @@ function App() {
       if (saved.gameId !== publicGameId) return;
       setStoredUserId(saved.userId);
       setUsername(saved.nickname);
-      api.getParticipantMe(publicGameId ?? undefined).then((participant) => {
+      api.getParticipantMe(publicGameId ?? "").then((participant) => {
         if (participant.participantId !== saved.userId || !participant.hasBet) throw new Error("stale identity");
         setSelectedTrainId(participant.trainId);
         setBetSubmitted(true);
@@ -112,11 +113,11 @@ function App() {
   }, [mode, publicGameId]);
 
   useEffect(() => {
-    if (mode !== "public" || publicView !== "progress") return;
+    if (mode !== "public" || (publicView !== "progress" && publicView !== "leaderboard")) return;
     let active = true;
     const loadProgress = async () => {
       try {
-        const [nextLeaderboard, nextJourneys] = await Promise.all([api.getLeaderboard(publicGameId ?? undefined), api.getTrains(publicGameId ?? undefined)]);
+        const [nextLeaderboard, nextJourneys] = await Promise.all([api.getLeaderboard(publicGameId ?? ""), api.getTrains(publicGameId ?? "")]);
         if (active) { setLeaderboard(nextLeaderboard.entries); setLeaderboardUpdatedAt(nextLeaderboard.lastUpdatedAt); setLeaderboardStale(nextLeaderboard.stale); setJourneys(nextJourneys.trains); }
       } catch { /* retain the last successful progress snapshot */ }
     };
@@ -134,7 +135,7 @@ function App() {
     if (mode !== "public" || !betSubmitted) return;
     let active = true;
     const loadResults = async () => {
-      try { const next = await api.getResults(publicGameId ?? undefined); if (active) setResults(next); } catch { /* retain last result */ }
+      try { const next = await api.getResults(publicGameId ?? ""); if (active) setResults(next); } catch { /* retain last result */ }
     };
     void loadResults();
     const timer = window.setInterval(loadResults, 60_000);
@@ -146,8 +147,8 @@ function App() {
     setBetLoading(true);
     setBetError(null);
     try {
-      const participant = await api.createParticipant(username, publicGameId ?? undefined);
-      await api.submitBet(selectedTrainId, publicGameId ?? undefined);
+      const participant = await api.createParticipant(username, publicGameId ?? "");
+      await api.submitBet(selectedTrainId, publicGameId ?? "");
       localStorage.setItem("trainbet_user", JSON.stringify({ gameId: publicGameId, userId: participant.participantId, nickname: participant.username }));
       setStoredUserId(participant.participantId);
       setBetSubmitted(true);
@@ -210,7 +211,7 @@ function App() {
     setAdminLoading(true);
     setAdminError(null);
     try {
-      const result = await api.createGame({ name: gameName.trim() || "Sommerfest train bet", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
+      const result = await api.createGame({ name: gameName.trim() || "Train Bet", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
       setAdminGame(result.game);
       setAdminGames((current) => [result.game, ...current]);
       setAdminView("review");
@@ -297,27 +298,28 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <GameHeader eyebrow="42 Wolfsburg Sommerfest" title="Train Bet" description="Choose the regional train that will gain the most delay during its journey." />
+    <main className="app-shell public-shell">
+      <GameHeader eyebrow="42 Wolfsburg" title="Train Bet" description="Choose the regional train that will gain the most delay during its journey." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} onSelect={setSelectedTrainId} liveEntries={leaderboard} />
+          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={setSelectedTrainId} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
       <Card>
         <nav className="view-tabs" aria-label="Game views">
-          {!betSubmitted && <Button type="button" variant={publicView === "browse" ? "primary" : "secondary"} className={publicView === "browse" ? "active" : ""} onClick={() => setPublicView("browse")}>Browse</Button>}
-          <Button type="button" variant={publicView === "progress" ? "primary" : "secondary"} className={publicView === "progress" ? "active" : ""} onClick={() => setPublicView("progress")}>Progress</Button>
-          {results?.final && results.status !== "pending" && <Button type="button" variant={publicView === "result" ? "primary" : "secondary"} className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</Button>}
+          {!betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
+          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
+          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Leaderboard</BadgeButton>}
+          {results?.final && results.status !== "pending" && <BadgeButton type="button" className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</BadgeButton>}
         </nav>
-        {publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {publicView === "result" && !loading && !error && <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}
         {publicView === "browse" && !loading && !error && game && journeys.length > 0 && (
           <>
-            <h2>{game.name}</h2>
             <p>Choose your train.</p>
             <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} onSelectTrain={setSelectedTrainId} onUsernameChange={setUsername} onSubmit={submitBet} />
           </>

@@ -1,5 +1,4 @@
 import type { Journey } from "../api/client";
-import { Badge } from "./components";
 import { TimeLabelView, type DelayStatus } from "./TimeLabelView";
 
 export type JourneyHeaderViewProps = { journey: Journey; showDelay?: boolean; className?: string };
@@ -21,7 +20,7 @@ export function JourneyHeaderView({ journey, showDelay = false, className = "" }
       : "onTime";
   return <header className={`ds-journey-header ${className}`.trim()}>
     <TimeLabelView time={{ planned: journey.scheduledDeparture }} size="big" arrangement="right" type="onlyTime" />
-    <Badge className="ds-journey-header__duration" variant="secondary">{formatDuration(journey.durationSeconds)}</Badge>
+    <span className="ds-journey-header__duration">{formatDuration(journey.durationSeconds)}</span>
     <TimeLabelView time={{ actual: journey.actualArrival, planned: journey.scheduledArrival }} delayStatus={showDelay ? delayStatus : "onTime"} size="big" arrangement="left" type="onlyTime" />
   </header>;
 }

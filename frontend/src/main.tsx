@@ -346,7 +346,7 @@ function App() {
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}
         {publicView === "browse" && !loading && !error && game && journeys.length > 0 && (
           <>
-            <p className="ds-text-medium">Choose the train you think will be least delayed.</p>
+            <p className="ds-text-medium">Choose the train you think will be most delayed😀.</p>
             <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={setSelectedTrainId} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}

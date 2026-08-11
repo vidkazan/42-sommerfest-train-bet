@@ -6,14 +6,24 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
-import { normalizeCandidate, type MotisStopTime, type Candidate } from "./journey-filter.js";
+import { normalizeCandidate, type Candidate } from "./journey-filter.js";
+import { createMotisDataSource, TransitDataSourceError } from "./transit-data-source.js";
+import { createIntBahnDataSource } from "./int-bahn-data-source.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
-const motisHeaders = {
-  Accept: "application/json",
-  "User-Agent": "42SommerfestTrainBet/0.1 (+https://github.com/vidkazan/42-sommerfest-train-bet)",
-};
+const transitUserAgent = "42SommerfestTrainBet/0.1";
+const motisDataSource = createMotisDataSource({
+  baseUrl: config.motisBaseUrl,
+  cacheTtlSeconds: config.cacheTtlSeconds,
+  userAgent: transitUserAgent,
+});
+const intBahnDataSource = createIntBahnDataSource({
+  baseUrl: config.intBahnBaseUrl,
+  cacheTtlSeconds: config.cacheTtlSeconds,
+  userAgent: transitUserAgent,
+});
+const transitDataSource = config.transitProvider === "int-bahn" ? intBahnDataSource : motisDataSource;
 mkdirSync(dirname(databasePath), { recursive: true });
 
 const db = new Database(databasePath);
@@ -185,54 +195,10 @@ const requireAdmin = (request: { headers: { authorization?: string } }, reply: {
   return true;
 };
 
-type StationCacheEntry = {
-  stopTimes: MotisStopTime[];
-  fetchedAt: string;
-  expiresAt: number;
-};
-
-const stationCache = new Map<string, StationCacheEntry>();
-
-const fetchStationDepartures = async (stopId: string, startTime: string, endTime: string): Promise<{ stopTimes: MotisStopTime[]; stale: boolean; fetchedAt: string }> => {
-  const cacheKey = `${stopId}|${startTime}|${endTime}`;
-  const cached = stationCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { stopTimes: cached.stopTimes, stale: false, fetchedAt: cached.fetchedAt };
-  }
-
-  const start = new Date(startTime).getTime();
-  const end = new Date(endTime).getTime();
-  const url = new URL("/api/v6/stoptimes", config.motisBaseUrl);
-  url.searchParams.set("stopId", stopId);
-  url.searchParams.set("time", startTime);
-  url.searchParams.set("window", String(Math.ceil((end - start) / 1000)));
-  url.searchParams.set("direction", "LATER");
-  url.searchParams.set("mode", "REGIONAL_RAIL");
-  url.searchParams.set("fetchStops", "true");
-  url.searchParams.set("withScheduledSkippedStops", "false");
-
-  try {
-    const response = await fetch(url, { headers: motisHeaders });
-    if (!response.ok) throw new Error(`MOTIS stoptimes failed for ${stopId}: ${response.status}`);
-    const body = await response.json() as { stopTimes?: MotisStopTime[] };
-    const fetchedAt = new Date().toISOString();
-    const entry = {
-      stopTimes: body.stopTimes ?? [],
-      fetchedAt,
-      expiresAt: Date.now() + config.cacheTtlSeconds * 1000,
-    };
-    stationCache.set(cacheKey, entry);
-    return { stopTimes: entry.stopTimes, stale: false, fetchedAt };
-  } catch (error) {
-    if (cached) return { stopTimes: cached.stopTimes, stale: true, fetchedAt: cached.fetchedAt };
-    throw error;
-  }
-};
-
 const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: string, endTime: string) => {
   const fetchedAt = new Date().toISOString();
   const stationResults = await Promise.allSettled(
-    stopIds.map((stopId) => fetchStationDepartures(stopId, startTime, endTime)),
+    stopIds.map((stopId) => transitDataSource.getStationDepartures(stopId, startTime, endTime)),
   );
   const candidates = new Map<string, Candidate>();
   const stationErrors: string[] = [];
@@ -450,7 +416,7 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/fetch-journeys", asyn
     );
     return result;
   } catch {
-    return reply.code(502).send({ error: "MOTIS_JOURNEY_FETCH_FAILED" });
+    return reply.code(502).send({ error: config.transitProvider === "int-bahn" ? "INT_BAHN_JOURNEY_FETCH_FAILED" : "MOTIS_JOURNEY_FETCH_FAILED" });
   }
 });
 
@@ -597,48 +563,12 @@ app.get<{ Querystring: { text?: string } }>("/api/admin/stations/search", async 
     return reply.code(400).send({ error: "SEARCH_TEXT_REQUIRED" });
   }
 
-  const url = new URL("/api/v1/geocode", config.motisBaseUrl);
-  url.searchParams.set("text", text);
-  url.searchParams.set("type", "STOP");
-
   try {
-    const response = await fetch(url, { headers: motisHeaders });
-    if (!response.ok) {
-      const body = await response.text();
-      request.log.warn({
-        upstreamStatus: response.status,
-        upstreamBody: body.slice(0, 500),
-        url: url.toString(),
-      }, "MOTIS location search returned an error");
-      return reply.code(502).send({ error: "MOTIS_LOCATION_SEARCH_FAILED" });
-    }
-
-    const payload = await response.json() as Array<{
-      type?: string;
-      id?: string;
-      name?: string;
-      lat?: number;
-      lon?: number;
-    }> | { places?: Array<{
-      type?: string;
-      id?: string;
-      name?: string;
-      lat?: number;
-      lon?: number;
-    }> };
-    const matches = Array.isArray(payload) ? payload : payload.places ?? [];
-
-    return matches
-      .filter((match) => match.type === "STOP" && match.id && match.name)
-      .map((match) => ({
-        stopId: match.id,
-        name: match.name,
-        lat: match.lat ?? null,
-        lon: match.lon ?? null,
-      }));
+    return await transitDataSource.searchStations(text);
   } catch (error) {
-    request.log.error({ err: error, url: url.toString() }, "MOTIS location search is unavailable");
-    return reply.code(502).send({ error: "MOTIS_LOCATION_SEARCH_UNAVAILABLE" });
+    const unavailable = !(error instanceof TransitDataSourceError) || error.status === undefined;
+    request.log[unavailable ? "error" : "warn"]({ err: error, url: error instanceof TransitDataSourceError ? error.url : undefined }, "Transit location search failed");
+    return reply.code(502).send({ error: unavailable ? "MOTIS_LOCATION_SEARCH_UNAVAILABLE" : "MOTIS_LOCATION_SEARCH_FAILED" });
   }
 });
 
@@ -689,30 +619,6 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
   `).all(game.id);
   return { trains, lastUpdatedAt: null, stale: false };
 });
-type LiveTrip = { legs?: Array<{
-  from?: { name?: string; lat?: number; lon?: number };
-  to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string };
-  legGeometry?: { points?: string };
-  cancelled?: boolean;
-}> };
-
-const fetchLiveTrip = async (tripId: string): Promise<{ actualArrival: string | null; arrived: boolean; cancelled: boolean; geometry: string | null; endpoints: string | null }> => {
-  const url = new URL("/api/v6/trip", config.motisBaseUrl);
-  url.searchParams.set("tripId", tripId);
-  const response = await fetch(url, { headers: motisHeaders });
-  if (!response.ok) throw new Error(`MOTIS trip failed: ${response.status}`);
-  const trip = await response.json() as LiveTrip;
-  const finalLeg = trip.legs?.at(-1);
-  const arrival = finalLeg?.to?.arrival ?? null;
-  const arrived = arrival !== null && Number.isFinite(Date.parse(arrival)) && Date.parse(arrival) <= Date.now();
-  const geometry = trip.legs?.map((leg) => leg.legGeometry?.points).filter((points): points is string => Boolean(points)) ?? [];
-  const firstLeg = trip.legs?.[0];
-  const endpoints = firstLeg?.from && finalLeg?.to
-    ? JSON.stringify([{ name: firstLeg.from.name, lat: firstLeg.from.lat, lon: firstLeg.from.lon }, { name: finalLeg.to.name, lat: finalLeg.to.lat, lon: finalLeg.to.lon }])
-    : null;
-  return { actualArrival: arrival, arrived, cancelled: finalLeg?.cancelled === true, geometry: geometry.length ? JSON.stringify(geometry) : null, endpoints };
-};
-
 let progressRefreshRunning = false;
 
 const refreshGameProgress = async (game: GameRow) => {
@@ -721,7 +627,7 @@ const refreshGameProgress = async (game: GameRow) => {
     FROM game_journeys j
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id) as Array<{ id: string; tripId: string; scheduledArrival: string; scheduledDeparture: string }>;
-  const results = await Promise.allSettled(rows.map((row) => fetchLiveTrip(row.tripId)));
+  const results = await Promise.allSettled(rows.map((row) => transitDataSource.getLiveTrip(row.tripId)));
   const fetchedAt = new Date().toISOString();
   const updates = rows.map((row, index) => {
     const result = results[index];

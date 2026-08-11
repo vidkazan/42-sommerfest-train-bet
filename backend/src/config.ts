@@ -13,6 +13,8 @@ export const config = {
   sessionSecret: optional("SESSION_SECRET", "development-secret"),
   adminToken: required("GAME_ADMIN_TOKEN"),
   motisBaseUrl: optional("MOTIS_BASE_URL", "https://api.transitous.org"),
+  intBahnBaseUrl: optional("INT_BAHN_BASE_URL", "https://int.bahn.de"),
+  transitProvider: optional("TRANSIT_PROVIDER", "motis"),
   eventTimezone: optional("EVENT_TIMEZONE", "Europe/Berlin"),
   cacheTtlSeconds: Number(optional("CACHE_TTL_SECONDS", "60")),
 };

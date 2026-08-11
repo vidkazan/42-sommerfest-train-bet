@@ -1,4 +1,4 @@
-type PhraseType = "departed" | "delayIncreased" | "delayUpdated" | "cancelled" | "arrived" | "leader";
+type PhraseType = "departed" | "delayIncreased" | "delayUpdated" | "delayModerate" | "delayDrastic" | "onTime" | "cancelled" | "arrived" | "leader" | "second" | "third";
 
 const phrases: Record<PhraseType, string[]> = {
   departed: [
@@ -23,6 +23,21 @@ const phrases: Record<PhraseType, string[]> = {
     "{train} is rewriting the timetable",
     "{train} has made a small punctuality plot twist",
   ],
+  delayModerate: [
+    "{train} is making a moderate delay gain",
+    "{train} is collecting delay at a respectable rate",
+    "{train} has found two extra minutes to lose",
+  ],
+  delayDrastic: [
+    "{train} is drastically losing the timetable",
+    "{train} is making a heroic delay gain",
+    "{train} has entered full delay mode",
+  ],
+  onTime: [
+    "{train} is on time :(",
+    "{train} has ruined its delay momentum :(",
+    "{train} is behaving suspiciously well :(",
+  ],
   cancelled: [
     "{train} has left the race",
     "{train} has rage-quit the competition",
@@ -44,6 +59,16 @@ const phrases: Record<PhraseType, string[]> = {
     "{train} is leading the punctuality disaster",
     "{train} has stolen the yellow jersey",
   ],
+  second: [
+    "{train} has grabbed 2nd place",
+    "{train} is now the runner-up in delay",
+    "{train} has moved into the silver position",
+  ],
+  third: [
+    "{train} has claimed 3rd place",
+    "{train} is on the delay podium",
+    "{train} has secured the bronze position",
+  ],
 };
 
 const stableIndex = (key: string, length: number) => {
@@ -54,4 +79,3 @@ const stableIndex = (key: string, length: number) => {
 
 export const eventPhrase = (type: PhraseType, train: string, key: string) =>
   phrases[type][stableIndex(key, phrases[type].length)].replace("{train}", train);
-

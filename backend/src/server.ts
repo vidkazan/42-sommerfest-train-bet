@@ -112,6 +112,14 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_game_journeys_game_id ON game_journeys(game_id);
   CREATE INDEX IF NOT EXISTS idx_game_events_game_id ON game_events(game_id);
+  CREATE TABLE IF NOT EXISTS journey_delay_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT NOT NULL REFERENCES games(id),
+    journey_id TEXT NOT NULL REFERENCES game_journeys(id),
+    delay_minutes INTEGER NOT NULL,
+    recorded_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delay_snapshots_lookup ON journey_delay_snapshots(game_id, journey_id, recorded_at);
 `);
 
 const columns = (table: string) => new Set(
@@ -666,6 +674,8 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
 });
 let progressRefreshRunning = false;
 
+const formatDelayMinutes = (minutes: number) => `${minutes > 0 ? "+" : minutes < 0 ? "−" : ""}${Math.abs(minutes)} min`;
+
 const refreshGameProgress = async (game: GameRow) => {
   const rows = db.prepare(`SELECT DISTINCT j.id, j.external_trip_id AS tripId, j.display_name AS displayName,
     j.scheduled_arrival AS scheduledArrival, j.scheduled_departure AS scheduledDeparture,
@@ -674,7 +684,8 @@ const refreshGameProgress = async (game: GameRow) => {
     FROM game_journeys j
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id) as Array<{ id: string; tripId: string; displayName: string; scheduledArrival: string; scheduledDeparture: string; previousStatus: string; previousCurrentDelay: number | null; previousRaceDelay: number | null; previousFinalDelay: number | null }>;
-  const previousLeader = db.prepare(`SELECT id FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL ORDER BY race_delay_minutes DESC, id ASC LIMIT 1`).get(game.id) as { id: string } | undefined;
+  const previousRanks = db.prepare(`SELECT id, ROW_NUMBER() OVER (ORDER BY race_delay_minutes DESC, id ASC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; position: number }>;
+  const previousLeader = previousRanks.find((rank) => rank.position === 1);
   const results = await Promise.allSettled(rows.map((row) => transitDataSource.getLiveTrip(row.tripId)));
   const fetchedAt = new Date().toISOString();
   const updates = rows.map((row, index) => {
@@ -704,9 +715,15 @@ const refreshGameProgress = async (game: GameRow) => {
       if (updateRow.status === "in_progress" && updateRow.previousStatus === "waiting_for_departure") addLiveEvent(game.id, "train_departed", { ...base, title: eventPhrase("departed", updateRow.displayName, updateRow.id), message: "The delay race is officially underway.", severity: "info" }, `${updateRow.id}:train_departed`, fetchedAt);
       if (updateRow.status === "cancelled" && updateRow.previousStatus !== "cancelled") addLiveEvent(game.id, "train_cancelled", { ...base, title: eventPhrase("cancelled", updateRow.displayName, updateRow.id), message: "Cancelled trains do not score delay points.", severity: "severe" }, `${updateRow.id}:train_cancelled`, fetchedAt);
       if (updateRow.status === "arrived" && updateRow.previousStatus !== "arrived") addLiveEvent(game.id, "train_arrived", { ...base, title: eventPhrase("arrived", updateRow.displayName, updateRow.id), message: updateRow.finalDelayMinutes === null ? "Final delay unavailable." : `Final delay: ${updateRow.finalDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.finalDelayMinutes)} min`, severity: "info" }, `${updateRow.id}:train_arrived`, fetchedAt);
-      if (updateRow.currentDelayMinutes !== null && updateRow.currentDelayMinutes !== updateRow.previousCurrentDelay) {
-        const increased = updateRow.previousCurrentDelay !== null && updateRow.currentDelayMinutes > updateRow.previousCurrentDelay;
-        addLiveEvent(game.id, increased ? "delay_increased" : "delay_updated", { ...base, title: eventPhrase(increased ? "delayIncreased" : "delayUpdated", updateRow.displayName, `${updateRow.id}:${updateRow.currentDelayMinutes}`), message: `Current delay: ${updateRow.currentDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.currentDelayMinutes)} min`, severity: increased ? "warning" : "info" }, `${updateRow.id}:delay:${updateRow.currentDelayMinutes}`, fetchedAt);
+      if (updateRow.currentDelayMinutes !== null) {
+        const snapshot = db.prepare(`SELECT delay_minutes AS delayMinutes FROM journey_delay_snapshots WHERE game_id = ? AND journey_id = ? AND recorded_at <= ? ORDER BY recorded_at DESC LIMIT 1`).get(game.id, updateRow.id, new Date(Date.parse(fetchedAt) - 10 * 60_000).toISOString()) as { delayMinutes: number } | undefined;
+        const gain = snapshot ? updateRow.currentDelayMinutes - snapshot.delayMinutes : null;
+        const baselineDelay = snapshot?.delayMinutes;
+        const bucket = Math.floor(Date.parse(fetchedAt) / 600_000);
+        if (gain !== null && baselineDelay !== undefined && gain >= 3) addLiveEvent(game.id, "delay_gain_drastic", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayDrastic", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay: ${formatDelayMinutes(baselineDelay)} → ${formatDelayMinutes(updateRow.currentDelayMinutes)} · Change: +${gain} min in the last 10 minutes`, severity: "warning" }, `${updateRow.id}:delay-drastic:${bucket}`, fetchedAt);
+        else if (gain !== null && baselineDelay !== undefined && gain >= 2) addLiveEvent(game.id, "delay_gain_moderate", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayModerate", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay: ${formatDelayMinutes(baselineDelay)} → ${formatDelayMinutes(updateRow.currentDelayMinutes)} · Change: +${gain} min in the last 10 minutes`, severity: "info" }, `${updateRow.id}:delay-moderate:${bucket}`, fetchedAt);
+        if (updateRow.currentDelayMinutes === 0 && updateRow.previousCurrentDelay !== null && updateRow.previousCurrentDelay !== 0) addLiveEvent(game.id, "on_time", { ...base, previousDelayMinutes: updateRow.previousCurrentDelay, currentDelayMinutes: 0, changeMinutes: -updateRow.previousCurrentDelay, title: eventPhrase("onTime", updateRow.displayName, updateRow.id), message: `Delay: ${formatDelayMinutes(updateRow.previousCurrentDelay)} → 0 min`, severity: "info" }, `${updateRow.id}:on-time:${bucket}`, fetchedAt);
+        db.prepare("INSERT INTO journey_delay_snapshots (game_id, journey_id, delay_minutes, recorded_at) VALUES (?, ?, ?, ?)").run(game.id, updateRow.id, updateRow.currentDelayMinutes, fetchedAt);
       }
       for (const alert of updateRow.alerts) {
         const key = `${updateRow.id}:alert:${alert.title}:${alert.description ?? ""}:${alert.severity}`;
@@ -715,6 +732,15 @@ const refreshGameProgress = async (game: GameRow) => {
     }
     const nextLeader = db.prepare(`SELECT id, display_name AS displayName FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL ORDER BY race_delay_minutes DESC, id ASC LIMIT 1`).get(game.id) as { id: string; displayName: string } | undefined;
     if (nextLeader && nextLeader.id !== previousLeader?.id) addLiveEvent(game.id, "new_leader", { trainId: nextLeader.id, displayName: nextLeader.displayName, title: eventPhrase("leader", nextLeader.displayName, `${game.id}:${nextLeader.id}`), message: "The delay race has a new front-runner.", severity: "warning", source: "generated" }, `${game.id}:leader:${nextLeader.id}`, fetchedAt);
+    const nextRanks = db.prepare(`SELECT id, display_name AS displayName, race_delay_minutes AS delayMinutes, ROW_NUMBER() OVER (ORDER BY race_delay_minutes DESC, id ASC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; displayName: string; delayMinutes: number; position: number }>;
+    for (const rank of nextRanks) {
+      const oldPosition = previousRanks.find((previous) => previous.id === rank.id)?.position;
+      if ((rank.position === 2 || rank.position === 3) && oldPosition !== rank.position) {
+        const place = rank.position === 2 ? "second" : "third";
+        addLiveEvent(game.id, `new_${place}_place`, { trainId: rank.id, displayName: rank.displayName, title: eventPhrase(place, rank.displayName, `${game.id}:${rank.id}:${rank.position}`), message: `Current delay: ${rank.delayMinutes >= 0 ? "+" : "−"}${Math.abs(rank.delayMinutes)} min`, severity: "info", source: "generated" }, `${game.id}:place:${rank.id}:${rank.position}`, fetchedAt);
+      }
+    }
+    db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - 30 * 60_000).toISOString());
   })();
 };
 
@@ -761,7 +787,7 @@ app.get<{ Querystring: { gameId?: string; limit?: string } }>("/api/events", asy
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const limit = Math.min(50, Math.max(1, Number.parseInt(request.query.limit ?? "5", 10) || 5));
   const rows = db.prepare(`SELECT id, type, payload_json AS payloadJson, created_at AS createdAt
-    FROM game_events WHERE game_id = ? AND type IN ('train_departed', 'delay_increased', 'delay_updated', 'train_cancelled', 'train_arrived', 'new_leader', 'provider_alert')
+    FROM game_events WHERE game_id = ? AND type IN ('train_departed', 'delay_gain_moderate', 'delay_gain_drastic', 'on_time', 'train_cancelled', 'train_arrived', 'new_leader', 'new_second_place', 'new_third_place', 'provider_alert')
     ORDER BY created_at DESC LIMIT ?`).all(game.id, limit) as Array<{ id: string; type: string; payloadJson: string; createdAt: string }>;
   return { events: rows.map((row) => ({ id: row.id, type: row.type, ...JSON.parse(row.payloadJson), createdAt: row.createdAt })) };
 });

@@ -173,6 +173,7 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       ),
       geometry: null,
       endpoints,
+      alerts: [],
     };
   };
 

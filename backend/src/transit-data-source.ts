@@ -28,6 +28,16 @@ export type LiveTripResult = {
   cancelled: boolean;
   geometry: string | null;
   endpoints: string | null;
+  alerts: TransitAlert[];
+};
+
+export type TransitAlert = {
+  title: string;
+  description?: string;
+  severity: "info" | "warning" | "severe";
+  cause?: string;
+  effect?: string;
+  source: "motis";
 };
 
 export type TransitDataSource = {
@@ -63,14 +73,28 @@ type MotisResponse = Array<{
   lon?: number;
 }> };
 
-type LiveStop = { arrival?: string; departure?: string; scheduledArrival?: string; scheduledDeparture?: string };
+type LiveAlert = { headerText?: string; descriptionText?: string; severityLevel?: string; cause?: string; effect?: string };
+type LiveStop = { arrival?: string; departure?: string; scheduledArrival?: string; scheduledDeparture?: string; alerts?: LiveAlert[] };
 type LiveTrip = { legs?: Array<{
-  from?: { name?: string; lat?: number; lon?: number; scheduledDeparture?: string; departure?: string };
-  to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string };
+  from?: { name?: string; lat?: number; lon?: number; scheduledDeparture?: string; departure?: string; alerts?: LiveAlert[] };
+  to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string; alerts?: LiveAlert[] };
   legGeometry?: { points?: string };
   cancelled?: boolean;
   intermediateStops?: LiveStop[];
 }> };
+
+const motisSeverity = (severity?: string): TransitAlert["severity"] => severity === "SEVERE" ? "severe" : severity === "WARNING" ? "warning" : "info";
+
+const normalizeMotisAlerts = (trip: LiveTrip): TransitAlert[] => (trip.legs ?? []).flatMap((leg) => [
+  ...(leg.from?.alerts ?? []), ...(leg.to?.alerts ?? []), ...(leg.intermediateStops ?? []).flatMap((stop) => stop.alerts ?? []),
+]).filter((alert) => alert.headerText || alert.descriptionText).map((alert) => ({
+  title: alert.headerText ?? "Service information",
+  description: alert.descriptionText,
+  severity: motisSeverity(alert.severityLevel),
+  cause: alert.cause,
+  effect: alert.effect,
+  source: "motis" as const,
+}));
 
 export class TransitDataSourceError extends Error {
   constructor(message: string, public readonly status?: number, public readonly url?: string) {
@@ -215,6 +239,7 @@ export const createMotisDataSource = (options: {
         cancelled: finalLeg?.cancelled === true,
         geometry: geometry.length ? JSON.stringify(geometry) : null,
         endpoints,
+        alerts: normalizeMotisAlerts(trip),
       };
     },
   };

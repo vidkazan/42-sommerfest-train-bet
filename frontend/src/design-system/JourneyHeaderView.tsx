@@ -15,8 +15,8 @@ function formatDuration(durationSeconds: number) {
 export function JourneyHeaderView({ journey, showDelay = false, className = "" }: JourneyHeaderViewProps) {
   const delayStatus: DelayStatus = journey.liveStatus === "cancelled" || journey.status === "cancelled"
     ? "cancelled"
-    : journey.raceDelayMinutes !== null && journey.raceDelayMinutes !== undefined && journey.raceDelayMinutes > 0
-      ? { type: "delay", minutes: journey.raceDelayMinutes }
+    : journey.finalDelayMinutes !== null && journey.finalDelayMinutes !== undefined && journey.finalDelayMinutes > 0
+      ? { type: "delay", minutes: journey.finalDelayMinutes }
       : "onTime";
   return <header className={`ds-journey-header ${className}`.trim()}>
     <TimeLabelView time={{ planned: journey.scheduledDeparture }} size="big" arrangement="right" type="onlyTime" />

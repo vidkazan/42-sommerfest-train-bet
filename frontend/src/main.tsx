@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
-import { api, type Game, type Journey, type Station } from "./api/client";
+import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
 import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveLeaderboardView, Notice, ResultsView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
@@ -63,6 +63,7 @@ function App() {
   const [leaderboard, setLeaderboard] = useState<LiveLeaderboardEntry[]>([]);
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [leaderboardStale, setLeaderboardStale] = useState(false);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] } | null>(null);
 
   useEffect(() => {
@@ -119,8 +120,8 @@ function App() {
     let active = true;
     const loadProgress = async () => {
       try {
-        const [nextLeaderboard, nextJourneys] = await Promise.all([api.getLeaderboard(publicGameId ?? ""), api.getTrains(publicGameId ?? "")]);
-        if (active) { setLeaderboard(nextLeaderboard.entries); setLeaderboardUpdatedAt(nextLeaderboard.lastUpdatedAt); setLeaderboardStale(nextLeaderboard.stale); setJourneys(nextJourneys.trains); }
+        const [nextLeaderboard, nextJourneys, nextEvents] = await Promise.all([api.getLeaderboard(publicGameId ?? ""), api.getTrains(publicGameId ?? ""), api.getEvents(publicGameId ?? "")]);
+        if (active) { setLeaderboard(nextLeaderboard.entries); setLeaderboardUpdatedAt(nextLeaderboard.lastUpdatedAt); setLeaderboardStale(nextLeaderboard.stale); setJourneys(nextJourneys.trains); setLiveEvents(nextEvents.events); }
       } catch { /* retain the last successful progress snapshot */ }
     };
     void loadProgress();
@@ -338,7 +339,7 @@ function App() {
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {results?.final && results.status !== "pending" && <BadgeButton type="button" className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</BadgeButton>}
         </nav>
-        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} events={liveEvents} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {publicView === "result" && !loading && !error && <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} />}
         {loading && <p role="status">Loading journeys…</p>}

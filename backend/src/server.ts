@@ -10,6 +10,7 @@ import { normalizeCandidate, type Candidate } from "./journey-filter.js";
 import { createMotisDataSource, TransitDataSourceError, type TransitRequestFailure } from "./transit-data-source.js";
 import { createIntBahnDataSource } from "./int-bahn-data-source.js";
 import { createTransitRequestQueue } from "./transit-request-queue.js";
+import { eventPhrase } from "./event-phrases.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
@@ -700,12 +701,12 @@ const refreshGameProgress = async (game: GameRow) => {
     for (const updateRow of updates) {
       update.run(updateRow.actualArrival, updateRow.actualDeparture, updateRow.currentDelayMinutes, updateRow.departureDelayMinutes, updateRow.raceDelayMinutes, updateRow.finalDelayMinutes, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
       const base = { trainId: updateRow.id, displayName: updateRow.displayName, source: "generated" };
-      if (updateRow.status === "in_progress" && updateRow.previousStatus === "waiting_for_departure") addLiveEvent(game.id, "train_departed", { ...base, title: `${updateRow.displayName} has left the station`, message: "The delay race is officially underway.", severity: "info" }, `${updateRow.id}:train_departed`, fetchedAt);
-      if (updateRow.status === "cancelled" && updateRow.previousStatus !== "cancelled") addLiveEvent(game.id, "train_cancelled", { ...base, title: `${updateRow.displayName} has left the race`, message: "Cancelled trains do not score delay points.", severity: "severe" }, `${updateRow.id}:train_cancelled`, fetchedAt);
-      if (updateRow.status === "arrived" && updateRow.previousStatus !== "arrived") addLiveEvent(game.id, "train_arrived", { ...base, title: `${updateRow.displayName} reached the finish line`, message: updateRow.finalDelayMinutes === null ? "Final delay unavailable." : `Final delay: ${updateRow.finalDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.finalDelayMinutes)} min`, severity: "info" }, `${updateRow.id}:train_arrived`, fetchedAt);
+      if (updateRow.status === "in_progress" && updateRow.previousStatus === "waiting_for_departure") addLiveEvent(game.id, "train_departed", { ...base, title: eventPhrase("departed", updateRow.displayName, updateRow.id), message: "The delay race is officially underway.", severity: "info" }, `${updateRow.id}:train_departed`, fetchedAt);
+      if (updateRow.status === "cancelled" && updateRow.previousStatus !== "cancelled") addLiveEvent(game.id, "train_cancelled", { ...base, title: eventPhrase("cancelled", updateRow.displayName, updateRow.id), message: "Cancelled trains do not score delay points.", severity: "severe" }, `${updateRow.id}:train_cancelled`, fetchedAt);
+      if (updateRow.status === "arrived" && updateRow.previousStatus !== "arrived") addLiveEvent(game.id, "train_arrived", { ...base, title: eventPhrase("arrived", updateRow.displayName, updateRow.id), message: updateRow.finalDelayMinutes === null ? "Final delay unavailable." : `Final delay: ${updateRow.finalDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.finalDelayMinutes)} min`, severity: "info" }, `${updateRow.id}:train_arrived`, fetchedAt);
       if (updateRow.currentDelayMinutes !== null && updateRow.currentDelayMinutes !== updateRow.previousCurrentDelay) {
         const increased = updateRow.previousCurrentDelay !== null && updateRow.currentDelayMinutes > updateRow.previousCurrentDelay;
-        addLiveEvent(game.id, increased ? "delay_increased" : "delay_updated", { ...base, title: increased ? `${updateRow.displayName} is getting dramatically less punctual` : `${updateRow.displayName} changed its delay strategy`, message: `Current delay: ${updateRow.currentDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.currentDelayMinutes)} min`, severity: increased ? "warning" : "info" }, `${updateRow.id}:delay:${updateRow.currentDelayMinutes}`, fetchedAt);
+        addLiveEvent(game.id, increased ? "delay_increased" : "delay_updated", { ...base, title: eventPhrase(increased ? "delayIncreased" : "delayUpdated", updateRow.displayName, `${updateRow.id}:${updateRow.currentDelayMinutes}`), message: `Current delay: ${updateRow.currentDelayMinutes >= 0 ? "+" : "−"}${Math.abs(updateRow.currentDelayMinutes)} min`, severity: increased ? "warning" : "info" }, `${updateRow.id}:delay:${updateRow.currentDelayMinutes}`, fetchedAt);
       }
       for (const alert of updateRow.alerts) {
         const key = `${updateRow.id}:alert:${alert.title}:${alert.description ?? ""}:${alert.severity}`;
@@ -713,7 +714,7 @@ const refreshGameProgress = async (game: GameRow) => {
       }
     }
     const nextLeader = db.prepare(`SELECT id, display_name AS displayName FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL ORDER BY race_delay_minutes DESC, id ASC LIMIT 1`).get(game.id) as { id: string; displayName: string } | undefined;
-    if (nextLeader && nextLeader.id !== previousLeader?.id) addLiveEvent(game.id, "new_leader", { trainId: nextLeader.id, displayName: nextLeader.displayName, title: `${nextLeader.displayName} takes the lead`, message: "The delay race has a new front-runner.", severity: "warning", source: "generated" }, `${game.id}:leader:${nextLeader.id}`, fetchedAt);
+    if (nextLeader && nextLeader.id !== previousLeader?.id) addLiveEvent(game.id, "new_leader", { trainId: nextLeader.id, displayName: nextLeader.displayName, title: eventPhrase("leader", nextLeader.displayName, `${game.id}:${nextLeader.id}`), message: "The delay race has a new front-runner.", severity: "warning", source: "generated" }, `${game.id}:leader:${nextLeader.id}`, fetchedAt);
   })();
 };
 

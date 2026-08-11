@@ -26,11 +26,15 @@ services:
       PORT: 3001
       DATABASE_PATH: /data/trainbet.sqlite
       CACHE_TTL_SECONDS: 60
+      TRANSIT_REQUEST_DELAY_MS: ${TRANSIT_REQUEST_DELAY_MS:-500}
+      TRANSIT_MAX_RETRIES: ${TRANSIT_MAX_RETRIES:-3}
       GAME_ADMIN_TOKEN: ${GAME_ADMIN_TOKEN:-development-admin-token}
       # Local Proxyman debugging only; never enable this in production.
       NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED:-0}
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret}
       MOTIS_BASE_URL: ${MOTIS_BASE_URL:-https://api.transitous.org}
+      TRANSIT_PROVIDER: ${TRANSIT_PROVIDER:-motis}
+      INT_BAHN_BASE_URL: ${INT_BAHN_BASE_URL:-https://int.bahn.de}
       EVENT_TIMEZONE: Europe/Berlin
       MAP_MIN: ${MAP_MIN:-52.0,10.0}
       MAP_MAX: ${MAP_MAX:-52.8,11.0}

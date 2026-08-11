@@ -1,5 +1,6 @@
-import type { MotisPlace, MotisStopTime } from "./journey-filter.js";
+import type { MotisStopTime } from "./journey-filter.js";
 import type { LiveTripResult, StationDeparturesResult, StationSearchResult, TransitDataSource } from "./transit-data-source.js";
+import { createTransitRequestQueue, type TransitRequestQueue } from "./transit-request-queue.js";
 import { TransitDataSourceError } from "./transit-data-source.js";
 
 type DbDeparture = {
@@ -14,6 +15,16 @@ type DbDeparture = {
   meldungen?: Array<{ ueberschrift?: string; text?: string }>;
 };
 
+type DbLocation = {
+  extId?: string;
+  id?: string;
+  lat?: number;
+  lon?: number;
+  name?: string;
+  products?: string[];
+  type?: string;
+};
+
 type DbSection = {
   abfahrtsOrt?: string;
   ankunftsOrt?: string;
@@ -25,29 +36,126 @@ type DbSection = {
   verkehrsmittel?: { name?: string; mittelText?: string; linienNummer?: string; produktGattung?: string };
 };
 
-type DbTrip = { verbindungen?: Array<{ verbindungsAbschnitte?: DbSection[] }> };
+type DbHalt = {
+  name?: string;
+  extId?: string;
+  abfahrt?: { sollzeit?: string; echtzeit?: string };
+  ankunft?: { sollzeit?: string; echtzeit?: string };
+  destinationCancelled?: boolean;
+  originCancelled?: boolean;
+};
+
+type DbTrip = {
+  verbindungen?: Array<{ verbindungsAbschnitte?: DbSection[] }>;
+  halte?: DbHalt[];
+  abfahrt?: { sollzeit?: string; echtzeit?: string };
+  ankunft?: { sollzeit?: string; echtzeit?: string };
+  cancelled?: boolean;
+};
 
 const displayName = (transport?: DbDeparture["verkehrmittel"]) => transport?.mittelText ?? transport?.name ?? transport?.langText ?? transport?.kurzText;
 
-const toPlace = (name?: string, time?: { sollzeit?: string; echtzeit?: string }): MotisPlace => ({ name, scheduledDeparture: time?.sollzeit, scheduledArrival: time?.sollzeit });
+const berlinDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Berlin",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  hourCycle: "h23",
+});
 
-const dateParts = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { date: value.slice(0, 10), time: "00:00:00" };
-  return { date: date.toISOString().slice(0, 10), time: date.toISOString().slice(11, 19) };
+const berlinParts = (timestamp: number): Record<string, string> =>
+  Object.fromEntries(berlinDateFormatter.formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
+
+const berlinLocalTimestamp = (value?: string): string | undefined => {
+  if (!value) return value;
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return value;
+  const match = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?$/);
+  if (!match) return value;
+  const wallTimestamp = Date.parse(`${match[1]}Z`);
+  if (!Number.isFinite(wallTimestamp)) return value;
+  const parts = berlinParts(wallTimestamp);
+  const formattedAsUtc = Date.parse(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`);
+  const offsetMinutes = Math.round((formattedAsUtc - wallTimestamp) / 60000);
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  return `${match[1]}${sign}${String(Math.floor(absoluteMinutes / 60)).padStart(2, "0")}:${String(absoluteMinutes % 60).padStart(2, "0")}`;
 };
 
-export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeconds: number; fetchImpl?: typeof fetch; userAgent: string }): TransitDataSource => {
+const dateParts = (value: string) => {
+  const berlinValue = berlinLocalTimestamp(value) ?? value;
+  const date = new Date(berlinValue);
+  if (Number.isNaN(date.getTime())) return { date: value.slice(0, 10), time: "00:00:00" };
+  const parts = berlinParts(date.getTime());
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}:${parts.second}` };
+};
+
+export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeconds: number; fetchImpl?: typeof fetch; userAgent: string; requestQueue?: TransitRequestQueue; requestDelayMs?: number; maxRetries?: number }): TransitDataSource => {
   const fetchImpl = options.fetchImpl ?? fetch;
   const headers = { Accept: "application/json", "User-Agent": options.userAgent };
+  const requestQueue = options.requestQueue ?? createTransitRequestQueue({ delayMs: options.requestDelayMs });
+  const maxRetries = options.maxRetries ?? 3;
   const cache = new Map<string, { result: StationDeparturesResult; expiresAt: number }>();
 
   const requestJson = async <T>(url: URL): Promise<T> => {
-    let response: Response;
-    try { response = await fetchImpl(url, { headers }); }
-    catch (error) { throw new TransitDataSourceError(error instanceof Error ? error.message : "int.bahn.de request failed", undefined, url.toString()); }
-    if (!response.ok) throw new TransitDataSourceError(`int.bahn.de request failed: ${response.status}`, response.status, url.toString());
-    return await response.json() as T;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      let result: { status: number; headers: Headers; body: string };
+      try {
+        result = await requestQueue.enqueue(async () => {
+          const response = await fetchImpl(url, { headers });
+          return { status: response.status, headers: response.headers, body: await response.text() };
+        });
+      } catch (error) {
+        throw new TransitDataSourceError(error instanceof Error ? error.message : "int.bahn.de request failed", undefined, url.toString());
+      }
+      if (result.status === 429 && attempt < maxRetries) {
+        const retryAfter = Number(result.headers.get("retry-after"));
+        const delay = Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 1000 * 2 ** attempt;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300) {
+        throw new TransitDataSourceError(`int.bahn.de request failed: ${result.status} ${result.body.slice(0, 200)}`, result.status, url.toString());
+      }
+      try {
+        return JSON.parse(result.body) as T;
+      } catch (error) {
+        throw new TransitDataSourceError(error instanceof Error ? error.message : "Invalid int.bahn.de response", result.status, url.toString());
+      }
+    }
+    throw new TransitDataSourceError("int.bahn.de request failed", undefined, url.toString());
+  };
+
+  const getLiveTrip = async (tripId: string): Promise<LiveTripResult> => {
+    const url = new URL("/web/api/reiseloesung/fahrt", options.baseUrl);
+    url.searchParams.set("journeyId", tripId);
+    const body = await requestJson<DbTrip>(url);
+    const sections = body.verbindungen?.[0]?.verbindungsAbschnitte ?? [];
+    const firstSection = sections[0];
+    const lastSection = sections.at(-1);
+    const firstHalt = body.halte?.[0];
+    const lastHalt = body.halte?.at(-1);
+    const scheduledArrival = berlinLocalTimestamp(body.ankunft?.sollzeit ?? lastHalt?.ankunft?.sollzeit ?? lastSection?.ankunft?.sollzeit) ?? null;
+    const scheduledDeparture = berlinLocalTimestamp(body.abfahrt?.sollzeit ?? firstHalt?.abfahrt?.sollzeit ?? firstSection?.abfahrt?.sollzeit) ?? null;
+    const actualArrival = berlinLocalTimestamp(body.ankunft?.echtzeit ?? lastHalt?.ankunft?.echtzeit ?? lastSection?.ankunft?.echtzeit) ?? scheduledArrival;
+    const arrived = Boolean(actualArrival && Date.parse(actualArrival) <= Date.now());
+    const origin = firstHalt?.name ?? firstSection?.abfahrtsOrt ?? null;
+    const destination = lastHalt?.name ?? lastSection?.ankunftsOrt ?? null;
+    const endpoints = origin && destination
+      ? JSON.stringify([{ name: origin }, { name: destination }])
+      : null;
+    return {
+      actualArrival,
+      scheduledArrival,
+      scheduledDeparture,
+      origin,
+      destination,
+      arrived,
+      cancelled: body.cancelled === true || Boolean(
+        sections.some((section) => section.destinationCancelled || section.originCancelled)
+        || body.halte?.some((halt) => halt.destinationCancelled || halt.originCancelled),
+      ),
+      geometry: null,
+      endpoints,
+    };
   };
 
   return {
@@ -61,23 +169,36 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       url.searchParams.set("datum", parts.date);
       url.searchParams.set("mitVias", "false");
       const body = await requestJson<{ entries?: DbDeparture[] }>(url);
-      const stopTimes: MotisStopTime[] = (body.entries ?? []).flatMap((entry) => {
-        if (!entry.journeyId || !displayName(entry.verkehrmittel) || !entry.zeit) return [];
-        const scheduled = toPlace(entry.terminus, { sollzeit: entry.zeit });
-        const actual = entry.ezZeit ? toPlace(entry.terminus, { sollzeit: entry.ezZeit }) : undefined;
-        return [{
-          tripId: entry.journeyId,
-          displayName: displayName(entry.verkehrmittel),
-          mode: entry.verkehrmittel?.produktGattung,
-          realTime: Boolean(entry.ezZeit),
-          place: { name: undefined, scheduledDeparture: entry.zeit },
-          tripTo: scheduled,
-          nextStops: actual ? [actual] : undefined,
-          cancelled: false,
-          tripCancelled: false,
-          ...(entry.meldungen?.some((message) => /cancel|ausfall|entfällt/i.test(`${message.ueberschrift ?? ""} ${message.text ?? ""}`)) ? { cancelled: true } : {}),
-        }];
+      // The DB endpoint returns buses and other products as well. Only fetch
+      // full journey details for regional RE services; the departure response
+      // itself does not contain the final scheduled arrival.
+      const entries = (body.entries ?? []).filter((entry) => {
+        const name = displayName(entry.verkehrmittel)?.toUpperCase() ?? "";
+        return entry.journeyId && entry.zeit && entry.verkehrmittel?.produktGattung === "REGIONAL" && name.startsWith("RE");
       });
+      const stopTimes = (await Promise.all(entries.map(async (entry): Promise<MotisStopTime | null> => {
+        try {
+          const detail = await getLiveTrip(entry.journeyId!);
+          const destination = detail.destination ?? entry.terminus;
+          const scheduledArrival = detail.scheduledArrival;
+          if (!scheduledArrival) return null;
+          const cancelledByMessage = entry.meldungen?.some((message) => /cancel|ausfall|entfällt/i.test(`${message.ueberschrift ?? ""} ${message.text ?? ""}`)) ?? false;
+          return {
+            tripId: entry.journeyId,
+            displayName: displayName(entry.verkehrmittel),
+            mode: "REGIONAL_RAIL",
+            realTime: Boolean(entry.ezZeit),
+            place: { name: undefined, scheduledDeparture: berlinLocalTimestamp(entry.zeit) },
+            tripFrom: { name: detail.origin ?? undefined, stopId },
+            tripTo: { name: destination ?? undefined, scheduledArrival },
+            cancelled: cancelledByMessage || detail.cancelled,
+            tripCancelled: detail.cancelled,
+          };
+        } catch {
+          // One unavailable journey must not hide all other departures.
+          return null;
+        }
+      }))).filter((stopTime): stopTime is MotisStopTime => stopTime !== null);
       const result = { stopTimes, stale: false, fetchedAt: new Date().toISOString() };
       cache.set(`${stopId}|${startTime}`, { result, expiresAt: Date.now() + options.cacheTtlSeconds * 1000 });
       return result;
@@ -88,21 +209,13 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       url.searchParams.set("suchbegriff", text);
       url.searchParams.set("typ", "ALL");
       url.searchParams.set("limit", "10");
-      const payload = await requestJson<Array<{ id?: string; name?: string; latitude?: number; longitude?: number }>>(url);
-      return payload.flatMap((place) => place.id && place.name ? [{ stopId: place.id, name: place.name, lat: place.latitude ?? null, lon: place.longitude ?? null }] : []);
+      const payload = await requestJson<DbLocation[]>(url);
+      return payload.flatMap((place) => {
+        const stopId = place.id ?? place.extId;
+        return stopId && place.name ? [{ stopId, name: place.name, lat: place.lat ?? null, lon: place.lon ?? null }] : [];
+      });
     },
 
-    async getLiveTrip(tripId): Promise<LiveTripResult> {
-      const url = new URL("/web/api/reiseloesung/fahrt", options.baseUrl);
-      url.searchParams.set("journeyId", tripId);
-      const body = await requestJson<DbTrip>(url);
-      const sections = body.verbindungen?.[0]?.verbindungsAbschnitte ?? [];
-      const last = sections.at(-1);
-      const arrival = last?.ankunft?.echtzeit ?? last?.ankunft?.sollzeit ?? null;
-      const departure = sections[0]?.abfahrt?.echtzeit ?? sections[0]?.abfahrt?.sollzeit ?? null;
-      const arrived = Boolean(arrival && Date.parse(arrival) <= Date.now());
-      const endpoints = sections.length ? JSON.stringify([{ name: sections[0]?.abfahrtsOrt }, { name: last?.ankunftsOrt }]) : null;
-      return { actualArrival: arrival, arrived, cancelled: Boolean(sections.some((section) => section.destinationCancelled || section.originCancelled)), geometry: null, endpoints };
-    },
+    getLiveTrip,
   };
 };

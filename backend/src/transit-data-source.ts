@@ -1,4 +1,5 @@
 import type { MotisStopTime } from "./journey-filter.js";
+import { createTransitRequestQueue, type TransitRequestQueue } from "./transit-request-queue.js";
 
 export type StationSearchResult = {
   stopId: string;
@@ -15,6 +16,10 @@ export type StationDeparturesResult = {
 
 export type LiveTripResult = {
   actualArrival: string | null;
+  scheduledArrival?: string | null;
+  scheduledDeparture?: string | null;
+  origin?: string | null;
+  destination?: string | null;
   arrived: boolean;
   cancelled: boolean;
   geometry: string | null;
@@ -42,7 +47,7 @@ type MotisResponse = Array<{
 }> };
 
 type LiveTrip = { legs?: Array<{
-  from?: { name?: string; lat?: number; lon?: number };
+  from?: { name?: string; lat?: number; lon?: number; scheduledDeparture?: string; departure?: string };
   to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string };
   legGeometry?: { points?: string };
   cancelled?: boolean;
@@ -60,23 +65,43 @@ export const createMotisDataSource = (options: {
   cacheTtlSeconds: number;
   fetchImpl?: typeof fetch;
   userAgent: string;
+  requestQueue?: TransitRequestQueue;
+  requestDelayMs?: number;
+  maxRetries?: number;
 }): TransitDataSource => {
   const fetchImpl = options.fetchImpl ?? fetch;
   const headers = { Accept: "application/json", "User-Agent": options.userAgent };
+  const requestQueue = options.requestQueue ?? createTransitRequestQueue({ delayMs: options.requestDelayMs });
+  const maxRetries = options.maxRetries ?? 3;
   const stationCache = new Map<string, { stopTimes: MotisStopTime[]; fetchedAt: string; expiresAt: number }>();
 
   const requestJson = async <T>(url: URL): Promise<T> => {
-    let response: Response;
-    try {
-      response = await fetchImpl(url, { headers });
-    } catch (error) {
-      throw new TransitDataSourceError(error instanceof Error ? error.message : "Transit API request failed", undefined, url.toString());
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      let result: { status: number; headers: Headers; body: string };
+      try {
+        result = await requestQueue.enqueue(async () => {
+          const response = await fetchImpl(url, { headers });
+          return { status: response.status, headers: response.headers, body: await response.text() };
+        });
+      } catch (error) {
+        throw new TransitDataSourceError(error instanceof Error ? error.message : "Transit API request failed", undefined, url.toString());
+      }
+      if (result.status === 429 && attempt < maxRetries) {
+        const retryAfter = Number(result.headers.get("retry-after"));
+        const delay = Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 1000 * 2 ** attempt;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300) {
+        throw new TransitDataSourceError(`Transit API request failed: ${result.status} ${result.body.slice(0, 200)}`, result.status, url.toString());
+      }
+      try {
+        return JSON.parse(result.body) as T;
+      } catch (error) {
+        throw new TransitDataSourceError(error instanceof Error ? error.message : "Invalid transit API response", result.status, url.toString());
+      }
     }
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new TransitDataSourceError(`Transit API request failed: ${response.status} ${body.slice(0, 200)}`, response.status, url.toString());
-    }
-    return await response.json() as T;
+    throw new TransitDataSourceError("Transit API request failed", undefined, url.toString());
   };
 
   return {
@@ -133,7 +158,17 @@ export const createMotisDataSource = (options: {
       const endpoints = firstLeg?.from && finalLeg?.to
         ? JSON.stringify([{ name: firstLeg.from.name, lat: firstLeg.from.lat, lon: firstLeg.from.lon }, { name: finalLeg.to.name, lat: finalLeg.to.lat, lon: finalLeg.to.lon }])
         : null;
-      return { actualArrival: arrival, arrived, cancelled: finalLeg?.cancelled === true, geometry: geometry.length ? JSON.stringify(geometry) : null, endpoints };
+      return {
+        actualArrival: arrival,
+        scheduledArrival: finalLeg?.to?.scheduledArrival ?? null,
+        scheduledDeparture: firstLeg?.from?.scheduledDeparture ?? null,
+        origin: firstLeg?.from?.name ?? null,
+        destination: finalLeg?.to?.name ?? null,
+        arrived,
+        cancelled: finalLeg?.cancelled === true,
+        geometry: geometry.length ? JSON.stringify(geometry) : null,
+        endpoints,
+      };
     },
   };
 };

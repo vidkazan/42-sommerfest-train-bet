@@ -17,9 +17,13 @@ services:
       PORT: 3001
       DATABASE_PATH: /data/trainbet.sqlite
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
+      TRANSIT_REQUEST_DELAY_MS: ${TRANSIT_REQUEST_DELAY_MS:-500}
+      TRANSIT_MAX_RETRIES: ${TRANSIT_MAX_RETRIES:-3}
       GAME_ADMIN_TOKEN: ${GAME_ADMIN_TOKEN:?GAME_ADMIN_TOKEN is required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       MOTIS_BASE_URL: ${MOTIS_BASE_URL:-https://api.transitous.org}
+      TRANSIT_PROVIDER: ${TRANSIT_PROVIDER:-motis}
+      INT_BAHN_BASE_URL: ${INT_BAHN_BASE_URL:-https://int.bahn.de}
       EVENT_TIMEZONE: ${EVENT_TIMEZONE:-Europe/Berlin}
     volumes:
       - sqlite_data:/data

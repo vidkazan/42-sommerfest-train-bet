@@ -35,4 +35,23 @@ describe("Motis transit data source", () => {
 
     await expect(source.searchStations("central")).resolves.toEqual([{ stopId: "stop-1", name: "Central Station", lat: 52.1, lon: 10.2 }]);
   });
+
+  it("retries a rate-limited provider request", async () => {
+    let calls = 0;
+    const source = createMotisDataSource({
+      baseUrl: "https://alternative.example",
+      cacheTtlSeconds: 60,
+      userAgent: "test-agent",
+      requestDelayMs: 0,
+      maxRetries: 1,
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) return new Response("", { status: 429, headers: { "Retry-After": "0" } });
+        return new Response(JSON.stringify({ places: [{ type: "STOP", id: "stop-1", name: "Central Station" }] }), { status: 200 });
+      },
+    });
+
+    await expect(source.searchStations("central")).resolves.toEqual([{ stopId: "stop-1", name: "Central Station", lat: null, lon: null }]);
+    expect(calls).toBe(2);
+  });
 });

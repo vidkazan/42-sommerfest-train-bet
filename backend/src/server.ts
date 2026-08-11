@@ -9,19 +9,25 @@ import { config } from "./config.js";
 import { normalizeCandidate, type Candidate } from "./journey-filter.js";
 import { createMotisDataSource, TransitDataSourceError } from "./transit-data-source.js";
 import { createIntBahnDataSource } from "./int-bahn-data-source.js";
+import { createTransitRequestQueue } from "./transit-request-queue.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
 const transitUserAgent = "42SommerfestTrainBet/0.1";
+const transitRequestQueue = createTransitRequestQueue({ delayMs: config.transitRequestDelayMs });
 const motisDataSource = createMotisDataSource({
   baseUrl: config.motisBaseUrl,
   cacheTtlSeconds: config.cacheTtlSeconds,
   userAgent: transitUserAgent,
+  requestQueue: transitRequestQueue,
+  maxRetries: config.transitMaxRetries,
 });
 const intBahnDataSource = createIntBahnDataSource({
   baseUrl: config.intBahnBaseUrl,
   cacheTtlSeconds: config.cacheTtlSeconds,
   userAgent: transitUserAgent,
+  requestQueue: transitRequestQueue,
+  maxRetries: config.transitMaxRetries,
 });
 const transitDataSource = config.transitProvider === "int-bahn" ? intBahnDataSource : motisDataSource;
 mkdirSync(dirname(databasePath), { recursive: true });

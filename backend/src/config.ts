@@ -17,6 +17,8 @@ export const config = {
   transitProvider: optional("TRANSIT_PROVIDER", "motis"),
   eventTimezone: optional("EVENT_TIMEZONE", "Europe/Berlin"),
   cacheTtlSeconds: Number(optional("CACHE_TTL_SECONDS", "60")),
+  transitRequestDelayMs: Number(optional("TRANSIT_REQUEST_DELAY_MS", "500")),
+  transitMaxRetries: Number(optional("TRANSIT_MAX_RETRIES", "3")),
 };
 
 if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
@@ -25,4 +27,12 @@ if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
 
 if (!Number.isFinite(config.cacheTtlSeconds) || config.cacheTtlSeconds <= 0) {
   throw new Error("CACHE_TTL_SECONDS must be greater than zero");
+}
+
+if (!Number.isFinite(config.transitRequestDelayMs) || config.transitRequestDelayMs < 0) {
+  throw new Error("TRANSIT_REQUEST_DELAY_MS must be zero or greater");
+}
+
+if (!Number.isInteger(config.transitMaxRetries) || config.transitMaxRetries < 0) {
+  throw new Error("TRANSIT_MAX_RETRIES must be a non-negative integer");
 }

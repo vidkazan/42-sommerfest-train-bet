@@ -335,7 +335,7 @@ function App() {
         <nav className="view-tabs" aria-label="Game views">
           {!betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
-          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Leaderboard</BadgeButton>}
+          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {results?.final && results.status !== "pending" && <BadgeButton type="button" className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</BadgeButton>}
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}

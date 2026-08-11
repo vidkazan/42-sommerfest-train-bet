@@ -107,6 +107,7 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="leaderboard-view" aria-label="Leaderboard">
+    <h2>Who’s betting on each train?</h2>
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const rankVariant = entry.position === 1 ? "red" : entry.position === 2 ? "orange" : entry.position === 3 ? "yellow" : "secondary";
@@ -118,7 +119,12 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
           <strong>{entry.displayName}</strong>
           {delay && <Badge variant="secondary">{delay}</Badge>}
         </div>
-        {entry.bettors.length > 0 && <div className="leaderboard-row__bettors">{entry.bettors.map((bettor) => <Badge key={bettor.participantId} variant={bettor.participantId === currentParticipantId ? "blue" : "secondary"} className="ds-text-medium">{bettor.username}</Badge>)}</div>}
+        <span className="leaderboard-row__route">{entry.origin} → {entry.destination}</span>
+        {entry.bettors.length > 0
+          ? <div className="leaderboard-row__bettors">{entry.bettors.map((bettor) => bettor.participantId === currentParticipantId
+            ? <Badge key={bettor.participantId} variant="blue" className="ds-text-medium">YOU · {bettor.username}</Badge>
+            : <Badge key={bettor.participantId} variant="secondary" className="ds-text-medium">{bettor.username}</Badge>)}</div>
+          : <span className="leaderboard-row__empty">No bettors yet</span>}
       </article>;
     })}</div>}
   </section>;

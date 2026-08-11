@@ -1,7 +1,8 @@
+# syntax=docker/dockerfile:1.7
 FROM node:22-bookworm-slim AS base
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 FROM base AS development
 COPY tsconfig.json vite.config.ts index.html ./
@@ -14,10 +15,9 @@ COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-bookworm-slim AS production
+FROM base AS production
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/package*.json ./
-RUN npm install --omit=dev
+RUN npm prune --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
 CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]

@@ -746,6 +746,14 @@ const refreshGameProgress = async (game: GameRow) => {
         addLiveEvent(game.id, `new_${place}_place`, { trainId: rank.id, displayName: rank.displayName, previousPosition: oldPosition ?? null, currentPosition: rank.position, title: eventPhrase(place, rank.displayName, `${game.id}:${rank.id}:${rank.position}`), message: `Position: ${formatPosition(oldPosition)} → ${formatPosition(rank.position)} · Current delay: ${formatDelayMinutes(rank.delayMinutes)}`, severity: "info", source: "generated" }, `${game.id}:place:${rank.id}:${rank.position}`, fetchedAt);
       }
     }
+    const remaining = db.prepare(`SELECT COUNT(*) AS count FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status NOT IN ('arrived', 'cancelled')`).get(game.id) as { count: number };
+    if (remaining.count === 0) {
+      const currentGame = db.prepare("SELECT status FROM games WHERE id = ?").get(game.id) as { status: string } | undefined;
+      if (currentGame?.status === "active") {
+        db.prepare("UPDATE games SET status = 'finished', updated_at = ? WHERE id = ?").run(fetchedAt, game.id);
+        addLiveEvent(game.id, "game_finished", { title: "The delay race is finished", message: "Every train has crossed the finish line. Time to count the damage.", severity: "info", source: "generated" }, `${game.id}:game_finished`, fetchedAt);
+      }
+    }
     db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - 30 * 60_000).toISOString());
   })();
 };
@@ -793,7 +801,7 @@ app.get<{ Querystring: { gameId?: string; limit?: string } }>("/api/events", asy
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const limit = Math.min(50, Math.max(1, Number.parseInt(request.query.limit ?? "5", 10) || 5));
   const rows = db.prepare(`SELECT id, type, payload_json AS payloadJson, created_at AS createdAt
-    FROM game_events WHERE game_id = ? AND type IN ('train_departed', 'delay_gain_moderate', 'delay_gain_drastic', 'on_time', 'train_cancelled', 'train_arrived', 'new_leader', 'new_second_place', 'new_third_place', 'provider_alert')
+    FROM game_events WHERE game_id = ? AND type IN ('train_departed', 'delay_gain_moderate', 'delay_gain_drastic', 'on_time', 'train_cancelled', 'train_arrived', 'new_leader', 'new_second_place', 'new_third_place', 'game_finished', 'provider_alert')
     ORDER BY created_at DESC LIMIT ?`).all(game.id, limit) as Array<{ id: string; type: string; payloadJson: string; createdAt: string }>;
   return { events: rows.map((row) => ({ id: row.id, type: row.type, ...JSON.parse(row.payloadJson), createdAt: row.createdAt })) };
 });

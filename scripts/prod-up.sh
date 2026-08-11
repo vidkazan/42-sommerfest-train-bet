@@ -9,4 +9,8 @@ if [ ! -f "$env_file" ]; then
   exit 1
 fi
 
+DOCKER_BUILDKIT=1 \
+COMPOSE_DOCKER_CLI_BUILD=1 \
+COMPOSE_PARALLEL_LIMIT=1 \
+BUILDKIT_PROGRESS=plain \
 docker compose --env-file "$env_file" -f "$compose_file" up -d --build

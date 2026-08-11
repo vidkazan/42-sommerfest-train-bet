@@ -126,7 +126,7 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
       })}</div>}
     </section>
     <section className="live-events" aria-label="Live events">
-      <div className="live-events__heading"><h2>Live events</h2><span className="live-events__status">Always watching</span></div>
+      <div className="live-events__heading"><h2>Live events</h2></div>
       {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => {
         const selectable = Boolean(event.trainId);
         const selectEventTrain = () => { if (event.trainId) onSelectTrain(event.trainId); };

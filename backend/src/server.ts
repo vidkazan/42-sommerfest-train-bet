@@ -81,6 +81,7 @@ db.exec(`
     scheduled_departure TEXT NOT NULL,
     scheduled_arrival TEXT NOT NULL,
     duration_seconds INTEGER NOT NULL,
+    stop_count INTEGER,
     origin_stop_id TEXT,
     realtime INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'candidate',
@@ -175,6 +176,9 @@ if (!columns("games").has("stop_ids_json")) {
 }
 if (!columns("game_journeys").has("actual_arrival")) db.exec("ALTER TABLE game_journeys ADD COLUMN actual_arrival TEXT");
 if (!columns("game_journeys").has("delay_seconds")) db.exec("ALTER TABLE game_journeys ADD COLUMN delay_seconds INTEGER");
+if (!columns("game_journeys").has("stop_count")) db.exec("ALTER TABLE game_journeys ADD COLUMN stop_count INTEGER");
+if (!columns("game_journeys").has("actual_departure")) db.exec("ALTER TABLE game_journeys ADD COLUMN actual_departure TEXT");
+if (!columns("game_journeys").has("departure_delay_seconds")) db.exec("ALTER TABLE game_journeys ADD COLUMN departure_delay_seconds INTEGER");
 if (!columns("game_journeys").has("live_status")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_status TEXT NOT NULL DEFAULT 'waiting'");
 if (!columns("game_journeys").has("last_live_update")) db.exec("ALTER TABLE game_journeys ADD COLUMN last_live_update TEXT");
 if (!columns("game_journeys").has("live_error")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_error TEXT");
@@ -239,8 +243,8 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
     INSERT OR REPLACE INTO game_journeys (
       id, game_id, external_trip_id, display_name, origin, destination,
       scheduled_departure, scheduled_arrival, duration_seconds, origin_stop_id,
-      realtime, status, included, exclusion_reason, route_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      stop_count, realtime, status, included, exclusion_reason, route_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
   `);
   const save = db.transaction(() => {
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(gameId);
@@ -248,7 +252,7 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
       insert.run(
         crypto.randomUUID(), gameId, row.externalTripId, row.displayName, row.origin,
         row.destination, row.scheduledDeparture, row.scheduledArrival, row.durationSeconds,
-        row.originStopId, row.realtime ? 1 : 0, row.status, row.exclusionReason, row.routeJson, fetchedAt,
+        row.originStopId, row.stopCount, row.realtime ? 1 : 0, row.status, row.exclusionReason, row.routeJson, fetchedAt,
       );
     }
     db.prepare("UPDATE games SET updated_at = ? WHERE id = ?").run(fetchedAt, gameId);
@@ -462,6 +466,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
     SELECT id, external_trip_id AS externalTripId, display_name AS displayName,
       origin, destination, scheduled_departure AS scheduledDeparture,
       scheduled_arrival AS scheduledArrival, duration_seconds AS durationSeconds,
+      stop_count AS stopCount,
       origin_stop_id AS originStopId, realtime, status, included, exclusion_reason AS exclusionReason,
       created_at AS createdAt
     FROM game_journeys
@@ -618,17 +623,28 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
   const game = getPublicGame(request.query.gameId);
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
 
-  const trains = db.prepare(`
+  const trainRows = db.prepare(`
     SELECT id, external_trip_id AS externalTripId, display_name AS displayName,
       origin, destination, scheduled_departure AS scheduledDeparture,
       scheduled_arrival AS scheduledArrival, duration_seconds AS durationSeconds,
       origin_stop_id AS originStopId, geometry, route_json AS routeJson,
       status, realtime, actual_arrival AS actualArrival, delay_seconds AS delaySeconds,
+      actual_departure AS actualDeparture, departure_delay_seconds AS departureDelaySeconds,
       live_status AS liveStatus, live_error AS liveError
     FROM game_journeys
     WHERE game_id = ? AND included = 1
     ORDER BY scheduled_departure ASC
   `).all(game.id);
+  const trains = trainRows.map((train) => {
+    const row = train as { stopCount?: number | null; routeJson?: string | null };
+    if (row.stopCount !== null && row.stopCount !== undefined) return train;
+    try {
+      const stops = JSON.parse(row.routeJson ?? "[]") as unknown[];
+      return { ...train as object, stopCount: stops.length >= 2 ? Math.max(0, stops.length - 2) : null };
+    } catch {
+      return train;
+    }
+  });
   return { trains, lastUpdatedAt: null, stale: false };
 });
 let progressRefreshRunning = false;
@@ -643,20 +659,24 @@ const refreshGameProgress = async (game: GameRow) => {
   const fetchedAt = new Date().toISOString();
   const updates = rows.map((row, index) => {
     const result = results[index];
-    if (result.status === "rejected") return { id: row.id, actualArrival: null, delaySeconds: null, geometry: null, endpoints: null, status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
+    if (result.status === "rejected") return { id: row.id, actualArrival: null, actualDeparture: null, delaySeconds: null, departureDelaySeconds: null, geometry: null, endpoints: null, status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
     const actualTimestamp = result.value.actualArrival ? Date.parse(result.value.actualArrival) : NaN;
     const scheduledTimestamp = Date.parse(row.scheduledArrival);
     const delaySeconds = Number.isFinite(actualTimestamp) && Number.isFinite(scheduledTimestamp)
       ? Math.round((actualTimestamp - scheduledTimestamp) / 1000) : null;
+    const actualDepartureTimestamp = result.value.actualDeparture ? Date.parse(result.value.actualDeparture) : NaN;
+    const scheduledDepartureTimestamp = Date.parse(row.scheduledDeparture);
+    const departureDelaySeconds = Number.isFinite(actualDepartureTimestamp) && Number.isFinite(scheduledDepartureTimestamp)
+      ? Math.round((actualDepartureTimestamp - scheduledDepartureTimestamp) / 1000) : null;
     const departureHasPassed = Number.isFinite(Date.parse(row.scheduledDeparture)) && Date.parse(row.scheduledDeparture) <= Date.now();
-    return { id: row.id, actualArrival: result.value.actualArrival, delaySeconds, geometry: result.value.geometry, endpoints: result.value.endpoints,
+    return { id: row.id, actualArrival: result.value.actualArrival, actualDeparture: result.value.actualDeparture ?? null, delaySeconds, departureDelaySeconds, geometry: result.value.geometry, endpoints: result.value.endpoints,
       status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : departureHasPassed ? "in_progress" : "waiting_for_departure", error: null };
   });
   db.transaction(() => {
-    const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, delay_seconds = ?,
+    const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, actual_departure = ?, delay_seconds = ?, departure_delay_seconds = ?,
       live_status = ?, last_live_update = ?, live_error = ?, geometry = COALESCE(?, geometry),
       route_json = COALESCE(?, route_json) WHERE id = ? AND game_id = ?`);
-    for (const updateRow of updates) update.run(updateRow.actualArrival, updateRow.delaySeconds, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
+    for (const updateRow of updates) update.run(updateRow.actualArrival, updateRow.actualDeparture, updateRow.delaySeconds, updateRow.departureDelaySeconds, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
   })();
 };
 
@@ -682,6 +702,7 @@ app.get<{ Querystring: { gameId?: string } }>("/api/progress", async (request, r
   const trains = db.prepare(`SELECT DISTINCT j.id, j.display_name AS displayName,
     j.scheduled_arrival AS scheduledArrival, j.actual_arrival AS actualArrival,
     j.delay_seconds AS delaySeconds, j.live_status AS status,
+    j.stop_count AS stopCount, j.departure_delay_seconds AS departureDelaySeconds,
     j.geometry, j.route_json AS routeJson,
     j.last_live_update AS lastUpdatedAt, j.live_error AS error
     FROM game_journeys j JOIN bets b ON b.train_id = j.id
@@ -705,19 +726,21 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
   const ranked = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId,
       j.display_name AS displayName, j.origin, j.destination, j.scheduled_departure AS scheduledDeparture,
       j.scheduled_arrival AS scheduledArrival, j.duration_seconds AS durationSeconds,
-      j.actual_arrival AS actualArrival, j.delay_seconds AS delaySeconds, j.live_status AS status
-    FROM bets b JOIN participants p ON p.id = b.participant_id
-    JOIN game_journeys j ON j.id = b.train_id
-    WHERE b.game_id = ? AND j.game_id = ? AND j.included = 1`)
-    .all(game.id, game.id) as Array<{ participantId: string; username: string; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string }>;
+      j.stop_count AS stopCount, j.actual_arrival AS actualArrival, j.delay_seconds AS delaySeconds,
+      j.departure_delay_seconds AS departureDelaySeconds, j.live_status AS status
+    FROM game_journeys j
+    LEFT JOIN bets b ON b.train_id = j.id AND b.game_id = ?
+    LEFT JOIN participants p ON p.id = b.participant_id
+    WHERE j.game_id = ? AND j.included = 1`)
+    .all(game.id, game.id) as Array<{ participantId: string | null; username: string | null; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; delaySeconds: number | null; departureDelaySeconds: number | null; status: string }>;
   ranked.sort((a, b) => (b.delaySeconds ?? -Infinity) - (a.delaySeconds ?? -Infinity));
   const trains = [...new Map(ranked.map((entry) => [entry.trainId, {
     trainId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination,
     scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds,
-    actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, status: entry.status,
+    stopCount: entry.stopCount, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, departureDelaySeconds: entry.departureDelaySeconds, status: entry.status,
     bettors: [] as Array<{ participantId: string; username: string }>,
   }])).values()];
-  for (const entry of ranked) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });
+  for (const entry of ranked) if (entry.participantId && entry.username) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });
   let previousDelay: number | null = null;
   let position = 0;
   const entries = trains.map((entry, index) => {

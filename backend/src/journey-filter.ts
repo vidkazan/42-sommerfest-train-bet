@@ -4,10 +4,12 @@ export type MotisStopTime = {
   cancelled?: boolean; tripCancelled?: boolean; place?: MotisPlace;
   tripFrom?: MotisPlace; tripTo?: MotisPlace;
   nextStops?: MotisPlace[];
+  stopCount?: number | null;
 };
 export type Candidate = {
   externalTripId: string; displayName: string; origin: string; destination: string;
   scheduledDeparture: string; scheduledArrival: string; durationSeconds: number;
+  stopCount: number | null;
   originStopId: string | null; realtime: boolean;
   routeJson: string;
   status: "candidate" | "excluded"; exclusionReason: string | null;
@@ -39,6 +41,7 @@ export function normalizeCandidate(stopTime: MotisStopTime, stopId: string, star
     scheduledDeparture: departure, scheduledArrival: arrival,
     durationSeconds: Number.isFinite(departureTimestamp) && Number.isFinite(arrivalTimestamp)
       ? Math.floor((arrivalTimestamp - departureTimestamp) / 1000) : 0,
+    stopCount: stopTime.stopCount ?? (stopTime.nextStops ? Math.max(0, stopTime.nextStops.length - 1) : null),
     originStopId: stopTime.tripFrom?.stopId ?? stopId,
     realtime: stopTime.realTime === true,
     routeJson: JSON.stringify([stopTime.place, ...(stopTime.nextStops ?? [])]

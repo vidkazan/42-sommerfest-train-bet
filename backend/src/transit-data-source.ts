@@ -16,8 +16,10 @@ export type StationDeparturesResult = {
 
 export type LiveTripResult = {
   actualArrival: string | null;
+  actualDeparture?: string | null;
   scheduledArrival?: string | null;
   scheduledDeparture?: string | null;
+  stopCount?: number | null;
   origin?: string | null;
   destination?: string | null;
   arrived: boolean;
@@ -182,8 +184,10 @@ export const createMotisDataSource = (options: {
         : null;
       return {
         actualArrival: arrival,
+        actualDeparture: firstLeg?.from?.departure ?? null,
         scheduledArrival: finalLeg?.to?.scheduledArrival ?? null,
         scheduledDeparture: firstLeg?.from?.scheduledDeparture ?? null,
+        stopCount: Math.max(0, (trip.legs?.length ?? 0) - 1),
         origin: firstLeg?.from?.name ?? null,
         destination: finalLeg?.to?.name ?? null,
         arrived,

@@ -144,6 +144,7 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
     const scheduledArrival = berlinLocalTimestamp(body.ankunft?.sollzeit ?? lastHalt?.ankunft?.sollzeit ?? lastSection?.ankunft?.sollzeit) ?? null;
     const scheduledDeparture = berlinLocalTimestamp(body.abfahrt?.sollzeit ?? firstHalt?.abfahrt?.sollzeit ?? firstSection?.abfahrt?.sollzeit) ?? null;
     const actualArrival = berlinLocalTimestamp(body.ankunft?.echtzeit ?? lastHalt?.ankunft?.echtzeit ?? lastSection?.ankunft?.echtzeit) ?? scheduledArrival;
+    const actualDeparture = berlinLocalTimestamp(body.abfahrt?.echtzeit ?? firstHalt?.abfahrt?.echtzeit ?? firstSection?.abfahrt?.echtzeit) ?? null;
     const arrived = Boolean(actualArrival && Date.parse(actualArrival) <= Date.now());
     const origin = firstHalt?.name ?? firstSection?.abfahrtsOrt ?? null;
     const destination = lastHalt?.name ?? lastSection?.ankunftsOrt ?? null;
@@ -152,8 +153,10 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       : null;
     return {
       actualArrival,
+      actualDeparture,
       scheduledArrival,
       scheduledDeparture,
+      stopCount: body.halte ? Math.max(0, body.halte.length - 2) : null,
       origin,
       destination,
       arrived,
@@ -199,6 +202,7 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
             place: { name: undefined, scheduledDeparture: berlinLocalTimestamp(entry.zeit) },
             tripFrom: { name: detail.origin ?? undefined, stopId },
             tripTo: { name: destination ?? undefined, scheduledArrival },
+            stopCount: detail.stopCount,
             cancelled: cancelledByMessage || detail.cancelled,
             tripCancelled: detail.cancelled,
           };

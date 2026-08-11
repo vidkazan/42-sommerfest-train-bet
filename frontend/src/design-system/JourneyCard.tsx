@@ -37,6 +37,17 @@ export function journeyStatus(journey: Journey) {
   return null;
 }
 
+function formatDepartureInfo(journey: Journey) {
+  if (journey.liveStatus === "cancelled" || journey.status === "cancelled") return { label: "Cancelled", variant: "red" as const };
+  if (journey.departureDelaySeconds !== null && journey.departureDelaySeconds !== undefined) {
+    const minutes = Math.round(Math.abs(journey.departureDelaySeconds) / 60);
+    if (journey.departureDelaySeconds > 0) return { label: `Currently +${minutes} min late`, variant: "red" as const };
+    if (journey.departureDelaySeconds < 0) return { label: `Currently ${minutes} min early`, variant: "secondary" as const };
+    return null;
+  }
+  return { label: "Departure data unavailable", variant: "secondary" as const };
+}
+
 export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, bettors = [], currentParticipantId, onSelect, onToggle, className = "" }: JourneyCardProps) {
   const leg = journeyToLeg(journey);
   const status = journeyStatus(journey);
@@ -49,15 +60,18 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
     : null;
   const selectable = (mode === "public" || mode === "leaderboard" || mode === "admin") && Boolean(onSelect || onToggle) && !isDisabled;
   const selectJourney = () => mode === "admin" ? onToggle?.(journey) : onSelect?.(journey);
-  return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
+  const departureInfo = formatDepartureInfo(journey);
+  const bettingInfo = departureInfo;
+  return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ds-journey-cell ds-journey-card--${mode} ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
     {mode === "leaderboard" && <div className="ds-journey-card__labels">
       {isCurrentUser && <Badge variant="blue">My bet</Badge>}
       <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>#{position}</Badge> : <Badge variant="secondary">{position ? `#${position}` : "⏳"}</Badge>}</strong>
       {mode === "leaderboard" && delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
       {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
     </div>}
-    <span className="ds-journey-cell__route">{journey.origin} → {journey.destination}</span>
+    <div className="ds-journey-cell__route"><span>{journey.origin} → {journey.destination}</span></div>
     <JourneyHeaderView journey={journey} showDelay={mode === "leaderboard"} />
+    {mode === "public" && <div className="journey-card__betting-info">{bettingInfo && <Badge variant={bettingInfo.variant}>{bettingInfo.label}</Badge>}</div>}
     <div className={`ds-journey-leg ds-journey-leg--${leg.transport} ${leg.cancelled ? "cancelled" : ""} ${journey.liveStatus === "arrived" ? "arrived" : ""}`} aria-label={`${leg.lineName}, ${leg.from} to ${leg.to}`}>
       <TransportIcon type={transportIconType(leg.transport)} decorative />
       <strong>{leg.lineName}</strong>

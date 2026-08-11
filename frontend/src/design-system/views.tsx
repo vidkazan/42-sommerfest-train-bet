@@ -12,6 +12,7 @@ export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "
 export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
   scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string;
+  stopCount: number | null; departureDelaySeconds: number | null;
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
@@ -45,25 +46,35 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
     document.querySelector(`[data-journey-id="${selectedTrainId}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedTrainId]);
 
+  useEffect(() => {
+    setNameConfirmed(false);
+  }, [selectedTrainId]);
+
   return <>
     {betSubmitted && <p className="notice">Your bet is confirmed. Follow the live progress below.</p>}
-    {!betSubmitted && !nameConfirmed && <form className="bet-form bet-name-form" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setNameConfirmed(true); }}>
-      <p className="ds-text-medium">Enter your name to start.</p>
-      <label className="field-label" htmlFor="username">Username</label>
-      <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
-      {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
-      <BadgeButton type="submit" className="ds-text-huge" disabled={usernameCheckLoading}>{usernameCheckLoading ? "Checking…" : "Next"}</BadgeButton>
-    </form>}
-    {!betSubmitted && nameConfirmed && <form className="bet-selection" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+    {!betSubmitted && <div className="bet-selection">
       <div className="bet-selection__header">
-        <span className="bet-selection__username ds-text-medium">{username}</span>
+        <span className="bet-selection__username ds-text-medium">{selectedTrainId ? `You’re betting on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "this train"}` : "Pick a train to get started"}</span>
       </div>
       <div className="journey-list bet-selection__list">
         {journeys.map((journey) => <JourneyCard key={journey.id} journey={journey} mode="public" selected={selectedTrainId === journey.id} disabled={betSubmitted} onSelect={(selectedJourney) => onSelectTrain(selectedJourney.id)} />)}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {selectedTrainId && <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={loading}>{loading ? "Submitting…" : `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}`}</BadgeButton>}
-    </form>}
+      {selectedTrainId && !nameConfirmed && <form className="bet-form" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setNameConfirmed(true); }}>
+        <p className="ds-text-medium">What’s your name?</p>
+        <label className="field-label" htmlFor="username">Username</label>
+        <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
+        {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
+        <BadgeButton type="submit" className="ds-text-huge" disabled={usernameCheckLoading}>{usernameCheckLoading ? "Checking…" : "Continue"}</BadgeButton>
+      </form>}
+      {selectedTrainId && nameConfirmed && <>
+        <p className="bet-selection__username ds-text-medium">Ready to confirm as {username}.</p>
+        <Notice className="bet-rules">Your train must accumulate the most delay by its final stop. Cancelled trains are out of the race. Ties share the win.</Notice>
+        <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+          <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={loading}>{loading ? "Submitting…" : `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}`}</BadgeButton>
+        </form>
+      </>}
+    </div>}
   </>;
 }
 
@@ -86,7 +97,7 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
   return <section className="progress-view" aria-label="Live progress">
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
-      const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
+      const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, departureDelaySeconds: entry.departureDelaySeconds, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
       return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
     })}</div>}
   </section>;

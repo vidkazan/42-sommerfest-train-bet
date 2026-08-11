@@ -33,3 +33,19 @@ Example cron entry:
 ```
 
 The backend is also published on port 3001 for direct debugging/API access. For the HTTPS frontend, keep `VITE_API_BASE_URL` empty so browser requests use the secure same-origin `/api` route; direct `http://<VDS_IP>:3001` requests are only suitable when the frontend itself is served over HTTP.
+
+## Private Grafana logs
+
+Set `GRAFANA_ADMIN_PASSWORD` in `.env.prod`, then start the production stack. Grafana binds only to VPS loopback:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+```
+
+Create an SSH tunnel from your computer:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 user@203.0.113.10
+```
+
+Open `http://localhost:3000` and sign in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. Loki and Alloy stay internal to the Docker network; Alloy collects Docker container logs and forwards them to Loki.

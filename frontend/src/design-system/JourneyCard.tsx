@@ -16,6 +16,7 @@ export type JourneyCardProps = {
   position?: number | null;
   bettors?: JourneyCardBettor[];
   currentParticipantId?: string | null;
+  raceStatus?: string;
   onSelect?: (journey: Journey) => void;
   onToggle?: (journey: Journey) => void;
   className?: string;
@@ -48,7 +49,13 @@ function formatDepartureInfo(journey: Journey) {
   return { label: "Departure data unavailable", variant: "secondary" as const };
 }
 
-export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, bettors = [], currentParticipantId, onSelect, onToggle, className = "" }: JourneyCardProps) {
+function formatPlace(position: number | null | undefined) {
+  if (!position) return "Waiting";
+  const suffix = position % 100 >= 11 && position % 100 <= 13 ? "th" : position % 10 === 1 ? "st" : position % 10 === 2 ? "nd" : position % 10 === 3 ? "rd" : "th";
+  return `${position}${suffix} place`;
+}
+
+export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, raceStatus, bettors = [], currentParticipantId, onSelect, onToggle, className = "" }: JourneyCardProps) {
   const leg = journeyToLeg(journey);
   const status = journeyStatus(journey);
   const isDisabled = disabled || (mode === "admin" && status?.blocked === true);
@@ -64,8 +71,9 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
   const bettingInfo = departureInfo;
   return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ds-journey-cell ds-journey-card--${mode} ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
     {mode === "leaderboard" && <div className="ds-journey-card__labels">
-      {isCurrentUser && <Badge variant="blue">My bet</Badge>}
-      <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>#{position}</Badge> : <Badge variant="secondary">{position ? `#${position}` : "⏳"}</Badge>}</strong>
+      <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>{formatPlace(position)}</Badge> : <Badge variant="secondary">{formatPlace(position)}</Badge>}</strong>
+      {isCurrentUser && <Badge variant="blue">My train</Badge>}
+      {raceStatus && <Badge variant={raceStatus === "TIED" ? "orange" : raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
       {mode === "leaderboard" && delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
       {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
     </div>}

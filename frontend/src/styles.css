@@ -40,6 +40,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .leaderboard-row__route { color: var(--ds-text-muted); display: block; font-size: var(--ds-font-small); margin-top: var(--ds-space-1); }
 .leaderboard-row__bettors { display: grid; gap: var(--ds-space-1); margin-top: var(--ds-space-2); }
 .leaderboard-row__bettors .ds-badge { justify-self: start; }
+.ds-journey-card__labels .ds-badge, .leaderboard-row .ds-badge { line-height: 1.25; min-height: 1.75rem; }
 .leaderboard-row__empty { color: var(--ds-text-muted); display: block; font-size: var(--ds-font-small); margin-top: var(--ds-space-2); }
 .ds-card p, .card p { color: var(--ds-text-muted); }
 .view-tabs { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); margin-bottom: var(--ds-space-4); }

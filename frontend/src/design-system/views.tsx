@@ -34,6 +34,25 @@ export type AdminSetupViewProps = {
 export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; selectedJourneyIds: string[]; loading: boolean; whitelistSaved: boolean; error: string | null; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
 
+type RaceState = "TIED" | "WAITING FOR RESULT" | "OUT OF THE RACE";
+
+function getRaceState(entry: LiveLeaderboardEntry, entries: LiveLeaderboardEntry[], currentParticipantId: string | null): RaceState | null {
+  if (entry.cancelled) return "OUT OF THE RACE";
+  if (entry.stale || entry.delaySeconds === null || entry.delaySeconds === undefined) return "WAITING FOR RESULT";
+  const scored = entries.filter((candidate) => !candidate.cancelled && !candidate.stale && candidate.delaySeconds !== null && candidate.delaySeconds !== undefined);
+  const highestDelay = scored.length ? Math.max(...scored.map((candidate) => candidate.delaySeconds as number)) : null;
+  const tiedAtHighest = highestDelay !== null && scored.filter((candidate) => candidate.delaySeconds === highestDelay).length > 1;
+  const tied = scored.filter((candidate) => candidate.delaySeconds === entry.delaySeconds).length > 1;
+  if (tied) return "TIED";
+  return null;
+}
+
+function raceStateVariant(state: RaceState) {
+  if (state === "OUT OF THE RACE") return "red" as const;
+  if (state === "TIED") return "orange" as const;
+  return "secondary" as const;
+}
+
 export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps) {
   return <section className="hero">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1><p>{description}</p></section>;
 }
@@ -98,7 +117,7 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
       const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, departureDelaySeconds: entry.departureDelaySeconds, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
-      return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
+      return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry, entries, currentParticipantId) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
     })}</div>}
   </section>;
 }
@@ -112,10 +131,12 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const rankVariant = entry.position === 1 ? "red" : entry.position === 2 ? "orange" : entry.position === 3 ? "yellow" : "secondary";
       const delay = entry.delaySeconds !== null && entry.delaySeconds !== undefined && entry.delaySeconds >= 0 ? `+${Math.round(entry.delaySeconds / 60)} min` : null;
+      const raceState = getRaceState(entry, entries, currentParticipantId);
       const selected = entry.trainId === selectedTrainId;
       return <article className={`leaderboard-row ${selected ? "selected" : ""}`} key={entry.trainId} role="button" tabIndex={0} onClick={() => onSelectTrain(entry.trainId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTrain(entry.trainId); } }}>
         <div className="leaderboard-row__top">
-          <Badge variant={rankVariant}>#{entry.position ?? "—"}</Badge>
+          <Badge variant={rankVariant}>{entry.position ? `${entry.position}${entry.position % 100 >= 11 && entry.position % 100 <= 13 ? "th" : entry.position % 10 === 1 ? "st" : entry.position % 10 === 2 ? "nd" : entry.position % 10 === 3 ? "rd" : "th"} place` : "Waiting"}</Badge>
+          {raceState && <Badge variant={raceStateVariant(raceState)}>{raceState}</Badge>}
           <strong>{entry.displayName}</strong>
           {delay && <Badge variant="secondary">{delay}</Badge>}
         </div>

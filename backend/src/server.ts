@@ -741,12 +741,20 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
     bettors: [] as Array<{ participantId: string; username: string }>,
   }])).values()];
   for (const entry of ranked) if (entry.participantId && entry.username) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });
+  trains.sort((a, b) => {
+    const aValid = a.status !== "cancelled" && a.delaySeconds !== null;
+    const bValid = b.status !== "cancelled" && b.delaySeconds !== null;
+    if (aValid !== bValid) return Number(bValid) - Number(aValid);
+    if (!aValid || !bValid) return 0;
+    return (b.delaySeconds as number) - (a.delaySeconds as number);
+  });
   let previousDelay: number | null = null;
   let position = 0;
   const entries = trains.map((entry, index) => {
-    if (entry.delaySeconds !== null && entry.delaySeconds !== previousDelay) position = index + 1;
+    const valid = entry.status !== "cancelled" && entry.delaySeconds !== null;
+    if (valid && entry.delaySeconds !== previousDelay) position = index + 1;
     previousDelay = entry.delaySeconds;
-    return { ...entry, position: entry.delaySeconds === null ? null : position };
+    return { ...entry, position: valid ? position : null };
   });
   const lastUpdatedAt = db.prepare("SELECT MAX(last_live_update) AS value FROM game_journeys WHERE game_id = ?").get(game.id) as { value: string | null };
   return {

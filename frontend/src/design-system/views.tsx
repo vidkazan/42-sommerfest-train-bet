@@ -125,11 +125,14 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
     })}</div>}
     <section className="live-events" aria-label="Live events">
       <div className="live-events__heading"><h2>Live events</h2><span className="live-events__status">Always watching</span></div>
-      {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => <article className="live-event" key={event.id}>
+      {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => {
+        const selectable = Boolean(event.trainId);
+        const selectEventTrain = () => { if (event.trainId) onSelectTrain(event.trainId); };
+        return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>
         <div className="live-event__badges">{event.source === "motis" && <Badge variant={eventVariant(event)}>MOTIS</Badge>}{event.trainId === myTrainId && <Badge variant="blue">My train</Badge>}</div>
         <div><strong>{event.title}</strong><p>{event.message}</p></div>
         <time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>
-      </article>)}</div>}
+      </article>})}</div>}
     </section>
   </section>;
 }

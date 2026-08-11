@@ -40,6 +40,9 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .live-events__status { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
 .live-events__list { display: grid; gap: var(--ds-space-2); }
 .live-event { align-items: start; background: color-mix(in srgb, var(--ds-surface-muted) 45%, var(--ds-surface) 55%); border-radius: var(--ds-radius-md); display: grid; gap: var(--ds-space-2); grid-template-columns: auto 1fr auto; padding: var(--ds-space-3); }
+.live-event.selectable { cursor: pointer; }
+.live-event.selectable:hover { background: color-mix(in srgb, var(--ds-focus-ring) 12%, var(--ds-surface-muted) 88%); }
+.live-event.selectable:focus-visible { outline: 2px solid var(--ds-focus-ring); outline-offset: 2px; }
 .live-event__badges { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ds-space-1); }
 .live-event .ds-badge { font-size: var(--ds-font-small); line-height: 1.25; min-height: 1.75rem; }
 .live-event strong { display: block; }

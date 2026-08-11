@@ -675,6 +675,11 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
 let progressRefreshRunning = false;
 
 const formatDelayMinutes = (minutes: number) => `${minutes > 0 ? "+" : minutes < 0 ? "−" : ""}${Math.abs(minutes)} min`;
+const formatPosition = (position: number | undefined) => {
+  if (!position) return "Waiting";
+  const suffix = position % 100 >= 11 && position % 100 <= 13 ? "th" : position % 10 === 1 ? "st" : position % 10 === 2 ? "nd" : position % 10 === 3 ? "rd" : "th";
+  return `${position}${suffix} place`;
+};
 
 const refreshGameProgress = async (game: GameRow) => {
   const rows = db.prepare(`SELECT DISTINCT j.id, j.external_trip_id AS tripId, j.display_name AS displayName,
@@ -737,7 +742,7 @@ const refreshGameProgress = async (game: GameRow) => {
       const oldPosition = previousRanks.find((previous) => previous.id === rank.id)?.position;
       if ((rank.position === 2 || rank.position === 3) && oldPosition !== rank.position) {
         const place = rank.position === 2 ? "second" : "third";
-        addLiveEvent(game.id, `new_${place}_place`, { trainId: rank.id, displayName: rank.displayName, title: eventPhrase(place, rank.displayName, `${game.id}:${rank.id}:${rank.position}`), message: `Current delay: ${rank.delayMinutes >= 0 ? "+" : "−"}${Math.abs(rank.delayMinutes)} min`, severity: "info", source: "generated" }, `${game.id}:place:${rank.id}:${rank.position}`, fetchedAt);
+        addLiveEvent(game.id, `new_${place}_place`, { trainId: rank.id, displayName: rank.displayName, previousPosition: oldPosition ?? null, currentPosition: rank.position, title: eventPhrase(place, rank.displayName, `${game.id}:${rank.id}:${rank.position}`), message: `Position: ${formatPosition(oldPosition)} → ${formatPosition(rank.position)} · Current delay: ${formatDelayMinutes(rank.delayMinutes)}`, severity: "info", source: "generated" }, `${game.id}:place:${rank.id}:${rank.position}`, fetchedAt);
       }
     }
     db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - 30 * 60_000).toISOString());

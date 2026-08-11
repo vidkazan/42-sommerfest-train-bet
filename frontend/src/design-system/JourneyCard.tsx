@@ -73,7 +73,7 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
     {mode === "leaderboard" && <div className="ds-journey-card__labels">
       <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>{formatPlace(position)}</Badge> : <Badge variant="secondary">{formatPlace(position)}</Badge>}</strong>
       {isCurrentUser && <Badge variant="blue">My train</Badge>}
-      {raceStatus && <Badge variant={raceStatus === "TIED" ? "orange" : raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
+      {raceStatus && <Badge variant={raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
       {mode === "leaderboard" && delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
       {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
     </div>}

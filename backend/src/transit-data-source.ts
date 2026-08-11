@@ -63,11 +63,13 @@ type MotisResponse = Array<{
   lon?: number;
 }> };
 
+type LiveStop = { arrival?: string; departure?: string; scheduledArrival?: string; scheduledDeparture?: string };
 type LiveTrip = { legs?: Array<{
   from?: { name?: string; lat?: number; lon?: number; scheduledDeparture?: string; departure?: string };
   to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string };
   legGeometry?: { points?: string };
   cancelled?: boolean;
+  intermediateStops?: LiveStop[];
 }> };
 
 export class TransitDataSourceError extends Error {
@@ -188,9 +190,18 @@ export const createMotisDataSource = (options: {
         actualArrival: arrival,
         actualDeparture: firstLeg?.from?.departure ?? null,
         currentDelayMinutes: (() => {
-          const current = [...(trip.legs ?? [])].reverse().find((leg) => leg.to?.arrival || leg.from?.departure);
-          const actual = current?.to?.arrival ?? current?.from?.departure;
-          const scheduled = current?.to?.scheduledArrival ?? current?.from?.scheduledDeparture;
+          const stops: LiveStop[] = [
+            ...(firstLeg?.from ? [{ arrival: undefined, departure: firstLeg.from.departure, scheduledDeparture: firstLeg.from.scheduledDeparture }] : []),
+            ...(trip.legs ?? []).flatMap((leg) => leg.intermediateStops ?? []),
+            ...(finalLeg?.to ? [{ arrival: finalLeg.to.arrival, scheduledArrival: finalLeg.to.scheduledArrival }] : []),
+          ];
+          const passedStops = stops.filter((stop) => {
+            const scheduled = stop.scheduledArrival ?? stop.scheduledDeparture;
+            return scheduled && Date.parse(scheduled) <= Date.now();
+          });
+          const current = passedStops.at(-1);
+          const actual = current?.arrival ?? current?.departure;
+          const scheduled = current?.scheduledArrival ?? current?.scheduledDeparture;
           return actual && scheduled ? Math.round((Date.parse(actual) - Date.parse(scheduled)) / 60000) : null;
         })(),
         departureDelayMinutes: firstLeg?.from?.departure && firstLeg.from.scheduledDeparture

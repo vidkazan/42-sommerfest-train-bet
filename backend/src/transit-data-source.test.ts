@@ -38,12 +38,14 @@ describe("Motis transit data source", () => {
 
   it("retries a rate-limited provider request", async () => {
     let calls = 0;
+    const failures: Array<{ status?: number; attempt: number; final: boolean }> = [];
     const source = createMotisDataSource({
       baseUrl: "https://alternative.example",
       cacheTtlSeconds: 60,
       userAgent: "test-agent",
       requestDelayMs: 0,
       maxRetries: 1,
+      logFailure: (failure) => failures.push(failure),
       fetchImpl: async () => {
         calls += 1;
         if (calls === 1) return new Response("", { status: 429, headers: { "Retry-After": "0" } });
@@ -53,5 +55,8 @@ describe("Motis transit data source", () => {
 
     await expect(source.searchStations("central")).resolves.toEqual([{ stopId: "stop-1", name: "Central Station", lat: null, lon: null }]);
     expect(calls).toBe(2);
+    expect(failures).toEqual([
+      expect.objectContaining({ status: 429, attempt: 1, final: false }),
+    ]);
   });
 });

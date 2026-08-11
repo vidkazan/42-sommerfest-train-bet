@@ -7,13 +7,18 @@ import { dirname } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { normalizeCandidate, type Candidate } from "./journey-filter.js";
-import { createMotisDataSource, TransitDataSourceError } from "./transit-data-source.js";
+import { createMotisDataSource, TransitDataSourceError, type TransitRequestFailure } from "./transit-data-source.js";
 import { createIntBahnDataSource } from "./int-bahn-data-source.js";
 import { createTransitRequestQueue } from "./transit-request-queue.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
+const app = Fastify({ logger: true });
 const transitUserAgent = "42SommerfestTrainBet/0.1";
+const logTransitFailure = (failure: TransitRequestFailure) => {
+  const log = failure.kind === "http" && !failure.final ? app.log.warn : app.log.error;
+  log.call(app.log, { ...failure, responseBody: failure.responseBody }, "Transit provider request failed");
+};
 const transitRequestQueue = createTransitRequestQueue({ delayMs: config.transitRequestDelayMs });
 const motisDataSource = createMotisDataSource({
   baseUrl: config.motisBaseUrl,
@@ -21,6 +26,7 @@ const motisDataSource = createMotisDataSource({
   userAgent: transitUserAgent,
   requestQueue: transitRequestQueue,
   maxRetries: config.transitMaxRetries,
+  logFailure: logTransitFailure,
 });
 const intBahnDataSource = createIntBahnDataSource({
   baseUrl: config.intBahnBaseUrl,
@@ -28,6 +34,7 @@ const intBahnDataSource = createIntBahnDataSource({
   userAgent: transitUserAgent,
   requestQueue: transitRequestQueue,
   maxRetries: config.transitMaxRetries,
+  logFailure: logTransitFailure,
 });
 const transitDataSource = config.transitProvider === "int-bahn" ? intBahnDataSource : motisDataSource;
 mkdirSync(dirname(databasePath), { recursive: true });
@@ -176,7 +183,6 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_bets_game_id ON bets(game_id)");
 db.exec(`UPDATE participants SET game_id = (SELECT id FROM games WHERE status = 'active' LIMIT 1) WHERE game_id IS NULL`);
 db.exec(`UPDATE bets SET game_id = (SELECT id FROM participants WHERE participants.id = bets.participant_id) WHERE game_id IS NULL`);
 
-const app = Fastify({ logger: true });
 await app.register(cors, { origin: true, credentials: true });
 await app.register(cookie, { secret: config.sessionSecret });
 

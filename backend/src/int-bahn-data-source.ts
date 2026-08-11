@@ -1,5 +1,5 @@
 import type { MotisStopTime } from "./journey-filter.js";
-import type { LiveTripResult, StationDeparturesResult, StationSearchResult, TransitDataSource } from "./transit-data-source.js";
+import type { LiveTripResult, StationDeparturesResult, StationSearchResult, TransitDataSource, TransitRequestFailure } from "./transit-data-source.js";
 import { createTransitRequestQueue, type TransitRequestQueue } from "./transit-request-queue.js";
 import { TransitDataSourceError } from "./transit-data-source.js";
 
@@ -88,7 +88,7 @@ const dateParts = (value: string) => {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}:${parts.second}` };
 };
 
-export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeconds: number; fetchImpl?: typeof fetch; userAgent: string; requestQueue?: TransitRequestQueue; requestDelayMs?: number; maxRetries?: number }): TransitDataSource => {
+export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeconds: number; fetchImpl?: typeof fetch; userAgent: string; requestQueue?: TransitRequestQueue; requestDelayMs?: number; maxRetries?: number; logFailure?: (failure: TransitRequestFailure) => void }): TransitDataSource => {
   const fetchImpl = options.fetchImpl ?? fetch;
   const headers = { Accept: "application/json", "User-Agent": options.userAgent };
   const requestQueue = options.requestQueue ?? createTransitRequestQueue({ delayMs: options.requestDelayMs });
@@ -97,6 +97,7 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
 
   const requestJson = async <T>(url: URL): Promise<T> => {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const startedAt = Date.now();
       let result: { status: number; headers: Headers; body: string };
       try {
         result = await requestQueue.enqueue(async () => {
@@ -104,9 +105,15 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
           return { status: response.status, headers: response.headers, body: await response.text() };
         });
       } catch (error) {
+        options.logFailure?.({ provider: "int-bahn", url: url.toString(), attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "network", message: error instanceof Error ? error.message : "int.bahn.de request failed", final: true });
         throw new TransitDataSourceError(error instanceof Error ? error.message : "int.bahn.de request failed", undefined, url.toString());
       }
-      if (result.status === 429 && attempt < maxRetries) {
+      const isRateLimited = result.status === 429;
+      const isFinal = !isRateLimited || attempt >= maxRetries;
+      if (result.status < 200 || result.status >= 300) {
+        options.logFailure?.({ provider: "int-bahn", url: url.toString(), status: result.status, attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "http", message: `int.bahn.de request failed: ${result.status}`, responseBody: result.body.slice(0, 200), final: isFinal });
+      }
+      if (isRateLimited && attempt < maxRetries) {
         const retryAfter = Number(result.headers.get("retry-after"));
         const delay = Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 1000 * 2 ** attempt;
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -118,6 +125,7 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       try {
         return JSON.parse(result.body) as T;
       } catch (error) {
+        options.logFailure?.({ provider: "int-bahn", url: url.toString(), status: result.status, attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "parse", message: error instanceof Error ? error.message : "Invalid int.bahn.de response", responseBody: result.body.slice(0, 200), final: true });
         throw new TransitDataSourceError(error instanceof Error ? error.message : "Invalid int.bahn.de response", result.status, url.toString());
       }
     }

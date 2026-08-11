@@ -32,6 +32,19 @@ export type TransitDataSource = {
   getLiveTrip: (tripId: string) => Promise<LiveTripResult>;
 };
 
+export type TransitRequestFailure = {
+  provider: "motis" | "int-bahn";
+  url: string;
+  status?: number;
+  attempt: number;
+  maxRetries: number;
+  elapsedMs: number;
+  kind: "http" | "network" | "parse";
+  message: string;
+  responseBody?: string;
+  final: boolean;
+};
+
 type MotisResponse = Array<{
   type?: string;
   id?: string;
@@ -68,6 +81,7 @@ export const createMotisDataSource = (options: {
   requestQueue?: TransitRequestQueue;
   requestDelayMs?: number;
   maxRetries?: number;
+  logFailure?: (failure: TransitRequestFailure) => void;
 }): TransitDataSource => {
   const fetchImpl = options.fetchImpl ?? fetch;
   const headers = { Accept: "application/json", "User-Agent": options.userAgent };
@@ -77,6 +91,7 @@ export const createMotisDataSource = (options: {
 
   const requestJson = async <T>(url: URL): Promise<T> => {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const startedAt = Date.now();
       let result: { status: number; headers: Headers; body: string };
       try {
         result = await requestQueue.enqueue(async () => {
@@ -84,9 +99,15 @@ export const createMotisDataSource = (options: {
           return { status: response.status, headers: response.headers, body: await response.text() };
         });
       } catch (error) {
+        options.logFailure?.({ provider: "motis", url: url.toString(), attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "network", message: error instanceof Error ? error.message : "Transit API request failed", final: true });
         throw new TransitDataSourceError(error instanceof Error ? error.message : "Transit API request failed", undefined, url.toString());
       }
-      if (result.status === 429 && attempt < maxRetries) {
+      const isRateLimited = result.status === 429;
+      const isFinal = !isRateLimited || attempt >= maxRetries;
+      if (result.status < 200 || result.status >= 300) {
+        options.logFailure?.({ provider: "motis", url: url.toString(), status: result.status, attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "http", message: `Transit API request failed: ${result.status}`, responseBody: result.body.slice(0, 200), final: isFinal });
+      }
+      if (isRateLimited && attempt < maxRetries) {
         const retryAfter = Number(result.headers.get("retry-after"));
         const delay = Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 1000 * 2 ** attempt;
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -98,6 +119,7 @@ export const createMotisDataSource = (options: {
       try {
         return JSON.parse(result.body) as T;
       } catch (error) {
+        options.logFailure?.({ provider: "motis", url: url.toString(), status: result.status, attempt: attempt + 1, maxRetries, elapsedMs: Date.now() - startedAt, kind: "parse", message: error instanceof Error ? error.message : "Invalid transit API response", responseBody: result.body.slice(0, 200), final: true });
         throw new TransitDataSourceError(error instanceof Error ? error.message : "Invalid transit API response", result.status, url.toString());
       }
     }

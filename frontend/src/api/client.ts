@@ -27,9 +27,10 @@ export type Journey = {
   routeJson?: string | null;
   geometry?: string | null;
   actualArrival?: string | null;
-  delaySeconds?: number | null;
+  raceDelayMinutes?: number | null;
+  currentDelayMinutes?: number | null;
   actualDeparture?: string | null;
-  departureDelaySeconds?: number | null;
+  departureDelayMinutes?: number | null;
   liveStatus?: string;
   liveError?: string | null;
 };
@@ -105,8 +106,8 @@ export const api = {
 
   getGame: (gameId: string) => request<{ game: Game }>(`/api/games/${encodeURIComponent(gameId)}`),
   getTrains: (gameId: string) => request<{ trains: Journey[]; lastUpdatedAt: string | null; stale: boolean }>(`/api/trains?gameId=${encodeURIComponent(gameId)}`),
-  getProgress: (gameId: string) => request<{ trains: Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; delaySeconds: number | null; status: string; cancelled: boolean; stale: boolean; geometry?: string | null; routeJson?: string | null }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/progress?gameId=${encodeURIComponent(gameId)}`),
-  getLeaderboard: (gameId: string) => request<{ entries: Array<{ trainId: string; displayName: string; origin: string; destination: string; position: number | null; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; delaySeconds: number | null; departureDelaySeconds: number | null; status: string; cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }> }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/leaderboard?gameId=${encodeURIComponent(gameId)}`),
+  getProgress: (gameId: string) => request<{ trains: Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; raceDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; cancelled: boolean; stale: boolean; geometry?: string | null; routeJson?: string | null }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/progress?gameId=${encodeURIComponent(gameId)}`),
+  getLeaderboard: (gameId: string) => request<{ entries: Array<{ trainId: string; displayName: string; origin: string; destination: string; position: number | null; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }> }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/leaderboard?gameId=${encodeURIComponent(gameId)}`),
   getResults: (gameId: string) => request<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] }>(`/api/results?gameId=${encodeURIComponent(gameId)}`),
   getParticipantMe: (gameId: string) => request<{ participantId: string; username: string; trainId: string; hasBet: true }>(`/api/participants/me?gameId=${encodeURIComponent(gameId)}`),
   checkUsernameAvailability: (username: string, gameId: string) =>

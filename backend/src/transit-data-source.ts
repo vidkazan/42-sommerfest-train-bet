@@ -17,6 +17,8 @@ export type StationDeparturesResult = {
 export type LiveTripResult = {
   actualArrival: string | null;
   actualDeparture?: string | null;
+  currentDelayMinutes?: number | null;
+  departureDelayMinutes?: number | null;
   scheduledArrival?: string | null;
   scheduledDeparture?: string | null;
   stopCount?: number | null;
@@ -185,6 +187,14 @@ export const createMotisDataSource = (options: {
       return {
         actualArrival: arrival,
         actualDeparture: firstLeg?.from?.departure ?? null,
+        currentDelayMinutes: (() => {
+          const current = [...(trip.legs ?? [])].reverse().find((leg) => leg.to?.arrival || leg.from?.departure);
+          const actual = current?.to?.arrival ?? current?.from?.departure;
+          const scheduled = current?.to?.scheduledArrival ?? current?.from?.scheduledDeparture;
+          return actual && scheduled ? Math.round((Date.parse(actual) - Date.parse(scheduled)) / 60000) : null;
+        })(),
+        departureDelayMinutes: firstLeg?.from?.departure && firstLeg.from.scheduledDeparture
+          ? Math.round((Date.parse(firstLeg.from.departure) - Date.parse(firstLeg.from.scheduledDeparture)) / 60000) : null,
         scheduledArrival: finalLeg?.to?.scheduledArrival ?? null,
         scheduledDeparture: firstLeg?.from?.scheduledDeparture ?? null,
         stopCount: Math.max(0, (trip.legs?.length ?? 0) - 1),

@@ -11,8 +11,8 @@ export type PublicView = "browse" | "progress" | "leaderboard" | "result";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
 export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
-  scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; delaySeconds: number | null; status: string;
-  stopCount: number | null; departureDelaySeconds: number | null;
+  scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; raceDelayMinutes: number | null; status: string;
+  stopCount: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null;
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
@@ -34,15 +34,14 @@ export type AdminSetupViewProps = {
 export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; selectedJourneyIds: string[]; loading: boolean; whitelistSaved: boolean; error: string | null; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
 
-type RaceState = "TIED" | "WAITING FOR RESULT" | "OUT OF THE RACE";
+type RaceState = "TIED" | "OUT OF THE RACE";
 
 function getRaceState(entry: LiveLeaderboardEntry, entries: LiveLeaderboardEntry[], currentParticipantId: string | null): RaceState | null {
   if (entry.cancelled) return "OUT OF THE RACE";
-  if (entry.stale || entry.delaySeconds === null || entry.delaySeconds === undefined) return "WAITING FOR RESULT";
-  const scored = entries.filter((candidate) => !candidate.cancelled && !candidate.stale && candidate.delaySeconds !== null && candidate.delaySeconds !== undefined);
-  const highestDelay = scored.length ? Math.max(...scored.map((candidate) => candidate.delaySeconds as number)) : null;
-  const tiedAtHighest = highestDelay !== null && scored.filter((candidate) => candidate.delaySeconds === highestDelay).length > 1;
-  const tied = scored.filter((candidate) => candidate.delaySeconds === entry.delaySeconds).length > 1;
+  if (entry.stale || entry.raceDelayMinutes === null || entry.raceDelayMinutes === undefined) return null;
+  const scored = entries.filter((candidate) => !candidate.cancelled && !candidate.stale && candidate.raceDelayMinutes !== null && candidate.raceDelayMinutes !== undefined);
+  const highestDelay = scored.length ? Math.max(...scored.map((candidate) => candidate.raceDelayMinutes as number)) : null;
+  const tied = scored.filter((candidate) => candidate.raceDelayMinutes === entry.raceDelayMinutes).length > 1;
   if (tied) return "TIED";
   return null;
 }
@@ -116,7 +115,7 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
   return <section className="progress-view" aria-label="Live progress">
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
-      const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, delaySeconds: entry.delaySeconds, departureDelaySeconds: entry.departureDelaySeconds, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
+      const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
       return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry, entries, currentParticipantId) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
     })}</div>}
   </section>;
@@ -130,7 +129,7 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const rankVariant = entry.position === 1 ? "red" : entry.position === 2 ? "orange" : entry.position === 3 ? "yellow" : "secondary";
-      const delay = entry.delaySeconds !== null && entry.delaySeconds !== undefined && entry.delaySeconds >= 0 ? `+${Math.round(entry.delaySeconds / 60)} min` : null;
+      const delay = entry.raceDelayMinutes !== null && entry.raceDelayMinutes !== undefined ? `${entry.raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(entry.raceDelayMinutes)} min` : null;
       const raceState = getRaceState(entry, entries, currentParticipantId);
       const selected = entry.trainId === selectedTrainId;
       return <article className={`leaderboard-row ${selected ? "selected" : ""}`} key={entry.trainId} role="button" tabIndex={0} onClick={() => onSelectTrain(entry.trainId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTrain(entry.trainId); } }}>
@@ -327,7 +326,7 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
       const markerColor = live?.position === 1 ? colors.fill.red : live?.position === 2 ? "#f97316" : live?.position === 3 ? colors.fill.yellow : isMine ? colors.transport.u : colors.map.train;
       const departure = Date.parse(journey.scheduledDeparture);
       const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
-      const delaySeconds = live?.delaySeconds ?? journey.delaySeconds ?? null;
+      const raceDelayMinutes = live?.raceDelayMinutes ?? journey.raceDelayMinutes ?? null;
       const cancelled = live?.cancelled ?? journey.liveStatus === "cancelled";
       const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
       const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
@@ -337,7 +336,7 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>
         </Polyline>
         {endpoints.slice(-1).map((point) => <CircleMarker key={`${journey.id}-arrival`} center={[point.lat, point.lon]} radius={4} pathOptions={{ color: lineColor, fillColor: lineColor, fillOpacity: 1, weight: 2 }}><Popup>Arrival: {journey.destination}</Popup></CircleMarker>)}
-        {markerPoint && !cancelled && <CircleMarker pane="markerPane" center={[markerPoint.lat, markerPoint.lon]} radius={8} pathOptions={{ color: "#fff", fillColor: markerColor, fillOpacity: 1, weight: 2 }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}><Popup><strong>{journey.displayName}</strong><br />{delaySeconds === null || delaySeconds === undefined ? "Delay unavailable" : `${Math.round(delaySeconds / 60)} min delay`}</Popup></CircleMarker>}
+        {markerPoint && !cancelled && <CircleMarker pane="markerPane" center={[markerPoint.lat, markerPoint.lon]} radius={8} pathOptions={{ color: "#fff", fillColor: markerColor, fillOpacity: 1, weight: 2 }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}><Popup><strong>{journey.displayName}</strong><br />{raceDelayMinutes === null || raceDelayMinutes === undefined ? "Delay unavailable" : `${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min delay gained`}</Popup></CircleMarker>}
       </Fragment>;
     })}
   </MapContainer>;

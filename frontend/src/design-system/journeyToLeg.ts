@@ -20,7 +20,7 @@ export type JourneyLeg = {
   arrival?: string;
   actualArrival?: string | null;
   durationSeconds: number;
-  delaySeconds?: number | null;
+  raceDelayMinutes?: number | null;
   cancelled: boolean;
   stops: JourneyLegStop[];
   geometry?: string | null;
@@ -71,7 +71,7 @@ export function journeyToLeg(journey: Journey): JourneyLeg {
     arrival: journey.scheduledArrival,
     actualArrival: journey.actualArrival,
     durationSeconds: journey.durationSeconds,
-    delaySeconds: journey.delaySeconds,
+    raceDelayMinutes: journey.raceDelayMinutes,
     cancelled: journey.status === "cancelled" || journey.liveStatus === "cancelled",
     stops: parseStops(journey.routeJson),
     geometry: journey.geometry,

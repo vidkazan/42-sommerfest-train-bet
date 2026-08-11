@@ -143,8 +143,13 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
     const lastHalt = body.halte?.at(-1);
     const scheduledArrival = berlinLocalTimestamp(body.ankunft?.sollzeit ?? lastHalt?.ankunft?.sollzeit ?? lastSection?.ankunft?.sollzeit) ?? null;
     const scheduledDeparture = berlinLocalTimestamp(body.abfahrt?.sollzeit ?? firstHalt?.abfahrt?.sollzeit ?? firstSection?.abfahrt?.sollzeit) ?? null;
-    const actualArrival = berlinLocalTimestamp(body.ankunft?.echtzeit ?? lastHalt?.ankunft?.echtzeit ?? lastSection?.ankunft?.echtzeit) ?? scheduledArrival;
+    const actualArrival = berlinLocalTimestamp(body.ankunft?.echtzeit ?? lastHalt?.ankunft?.echtzeit ?? lastSection?.ankunft?.echtzeit) ?? null;
     const actualDeparture = berlinLocalTimestamp(body.abfahrt?.echtzeit ?? firstHalt?.abfahrt?.echtzeit ?? firstSection?.abfahrt?.echtzeit) ?? null;
+    const departureDelayMinutes = actualDeparture && scheduledDeparture ? Math.round((Date.parse(actualDeparture) - Date.parse(scheduledDeparture)) / 60000) : null;
+    const currentHalt = [...(body.halte ?? [])].reverse().find((halt) => halt.ankunft?.echtzeit || halt.abfahrt?.echtzeit);
+    const currentActual = berlinLocalTimestamp(currentHalt?.ankunft?.echtzeit ?? currentHalt?.abfahrt?.echtzeit) ?? null;
+    const currentScheduled = berlinLocalTimestamp(currentHalt?.ankunft?.sollzeit ?? currentHalt?.abfahrt?.sollzeit) ?? null;
+    const currentDelayMinutes = currentActual && currentScheduled ? Math.round((Date.parse(currentActual) - Date.parse(currentScheduled)) / 60000) : null;
     const arrived = Boolean(actualArrival && Date.parse(actualArrival) <= Date.now());
     const origin = firstHalt?.name ?? firstSection?.abfahrtsOrt ?? null;
     const destination = lastHalt?.name ?? lastSection?.ankunftsOrt ?? null;
@@ -154,6 +159,8 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
     return {
       actualArrival,
       actualDeparture,
+      currentDelayMinutes,
+      departureDelayMinutes,
       scheduledArrival,
       scheduledDeparture,
       stopCount: body.halte ? Math.max(0, body.halte.length - 2) : null,

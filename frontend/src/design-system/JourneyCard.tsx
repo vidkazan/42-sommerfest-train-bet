@@ -25,10 +25,10 @@ export type JourneyCardProps = {
 export function journeyStatus(journey: Journey) {
   if (journey.liveStatus === "cancelled" || journey.status === "cancelled") return { label: "Cancelled", variant: "danger" as const, blocked: true };
   if (journey.status === "excluded") return { label: `Excluded: ${journey.exclusionReason ?? "rule mismatch"}`, variant: "muted" as const, blocked: true };
-  if (journey.delaySeconds !== null && journey.delaySeconds !== undefined) {
-    const minutes = Math.round(Math.abs(journey.delaySeconds) / 60);
-    if (journey.delaySeconds > 0) return { label: `+${minutes} min delay`, variant: "danger" as const, blocked: false };
-    if (journey.delaySeconds < 0) return { label: `−${minutes} min early`, variant: "neutral" as const, blocked: false };
+  if (journey.raceDelayMinutes !== null && journey.raceDelayMinutes !== undefined) {
+    const minutes = Math.abs(journey.raceDelayMinutes);
+    if (journey.raceDelayMinutes > 0) return { label: `+${minutes} min delay`, variant: "danger" as const, blocked: false };
+    if (journey.raceDelayMinutes < 0) return { label: `−${minutes} min early`, variant: "neutral" as const, blocked: false };
     return { label: "On time", variant: "success" as const, blocked: false };
   }
   if (journey.liveStatus === "waiting" || journey.liveStatus === "waiting_for_departure") return { label: "Waiting for departure", variant: "neutral" as const, blocked: false };
@@ -40,13 +40,13 @@ export function journeyStatus(journey: Journey) {
 
 function formatDepartureInfo(journey: Journey) {
   if (journey.liveStatus === "cancelled" || journey.status === "cancelled") return { label: "Cancelled", variant: "red" as const };
-  if (journey.departureDelaySeconds !== null && journey.departureDelaySeconds !== undefined) {
-    const minutes = Math.round(Math.abs(journey.departureDelaySeconds) / 60);
-    if (journey.departureDelaySeconds > 0) return { label: `Currently +${minutes} min late`, variant: "red" as const };
-    if (journey.departureDelaySeconds < 0) return { label: `Currently ${minutes} min early`, variant: "secondary" as const };
+  if (journey.departureDelayMinutes !== null && journey.departureDelayMinutes !== undefined) {
+    const minutes = Math.abs(journey.departureDelayMinutes);
+    if (journey.departureDelayMinutes > 0) return { label: `Currently +${minutes} min late`, variant: "red" as const };
+    if (journey.departureDelayMinutes < 0) return { label: `Currently ${minutes} min early`, variant: "secondary" as const };
     return null;
   }
-  return { label: "Departure data unavailable", variant: "secondary" as const };
+  return null;
 }
 
 function formatPlace(position: number | null | undefined) {
@@ -62,8 +62,8 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
   const isCurrentUser = bettors.some((bettor) => bettor.participantId === currentParticipantId);
   const rankBadge = position === 1 ? "red" : position === 2 ? "orange" : position === 3 ? "yellow" : null;
   const rankBadgeClass = position === 1 ? "ds-rank-badge--red" : position === 2 ? "ds-rank-badge--orange" : position === 3 ? "ds-rank-badge--yellow" : "";
-  const delayBadge = journey.delaySeconds !== null && journey.delaySeconds !== undefined && journey.delaySeconds >= 0
-    ? `+${Math.round(journey.delaySeconds / 60)} min`
+  const delayBadge = journey.raceDelayMinutes !== null && journey.raceDelayMinutes !== undefined && journey.raceDelayMinutes >= 0
+    ? `+${journey.raceDelayMinutes} min`
     : null;
   const selectable = (mode === "public" || mode === "leaderboard" || mode === "admin") && Boolean(onSelect || onToggle) && !isDisabled;
   const selectJourney = () => mode === "admin" ? onToggle?.(journey) : onSelect?.(journey);

@@ -16,7 +16,7 @@ export type LiveLeaderboardEntry = {
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
-export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
+export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; selectionVersion: number; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; events: LiveEvent[] };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
@@ -280,6 +280,17 @@ function MapFitTrips({ points }: { points: Array<{ lat: number; lon: number }> }
   return null;
 }
 
+function MapFocusTrip({ points, focusVersion }: { points: Array<{ lat: number; lon: number }>; focusVersion: number }) {
+  const map = useMap();
+  const focusKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
+  useEffect(() => {
+    if (!points.length) return;
+    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
+    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
+  }, [map, focusKey, focusVersion]);
+  return null;
+}
+
 function decodePolyline(encoded: string): Array<{ lat: number; lon: number }> {
   const points: Array<{ lat: number; lon: number }> = [];
   let index = 0; let lat = 0; let lon = 0;
@@ -303,7 +314,7 @@ function directionAngle(points: Array<{ lat: number; lon: number }>, index: numb
   return Math.round((Math.atan2(target.lon - current.lon, target.lat - current.lat) * 180) / Math.PI);
 }
 
-export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
+export function TrainMapView({ journeys, selectedTrainId, selectionVersion, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
   const routes = journeys.map((journey) => {
     const live = liveEntries.find((train) => train.trainId === journey.id);
     const geometry = live?.geometry ?? journey.geometry;
@@ -317,11 +328,13 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
     return { journey, points, endpoints };
   }).filter((route) => route.points.length > 0);
   const allPoints = routes.flatMap((route) => route.points);
+  const selectedPoints = routes.find((route) => route.journey.id === selectedTrainId)?.points ?? [];
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
 
   return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
     <MapResizeHandler />
     <MapFitTrips points={allPoints} />
+    <MapFocusTrip points={selectedPoints} focusVersion={selectionVersion} />
     <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
     {[...routes].sort((a, b) => {
       const aEntry = liveEntries.find((entry) => entry.trainId === a.journey.id);

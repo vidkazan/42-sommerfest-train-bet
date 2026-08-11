@@ -54,6 +54,7 @@ function App() {
   };
   const [username, setUsername] = useState("");
   const [selectedTrainId, setSelectedTrainId] = useState<string | null>(null);
+  const [selectionVersion, setSelectionVersion] = useState(0);
   const [betSubmitted, setBetSubmitted] = useState(false);
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
@@ -65,6 +66,11 @@ function App() {
   const [leaderboardStale, setLeaderboardStale] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] } | null>(null);
+
+  const selectTrain = (trainId: string) => {
+    setSelectedTrainId(trainId);
+    setSelectionVersion((version) => version + 1);
+  };
 
   useEffect(() => {
     if (mode !== "public") return;
@@ -329,7 +335,7 @@ function App() {
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={setSelectedTrainId} liveEntries={leaderboard} />
+          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} selectionVersion={selectionVersion} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
       <Card>
@@ -339,8 +345,8 @@ function App() {
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {results?.final && results.status !== "pending" && <BadgeButton type="button" className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</BadgeButton>}
         </nav>
-        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} events={liveEvents} />}
-        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={setSelectedTrainId} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} events={liveEvents} />}
+        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {publicView === "result" && !loading && !error && <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
@@ -348,7 +354,7 @@ function App() {
         {publicView === "browse" && !loading && !error && game && journeys.length > 0 && (
           <>
             <p className="ds-text-medium">Choose the train whose delay will increase the most during its journey.</p>
-            <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={setSelectedTrainId} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
+            <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={selectTrain} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}
       </Card>

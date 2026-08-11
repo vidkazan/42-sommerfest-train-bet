@@ -118,11 +118,13 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
   const myTrainId = entries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId))?.trainId;
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="progress-view" aria-label="Live progress">
-    <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
-    {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
-      const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
-      return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
-    })}</div>}
+    <section className="progress-race" aria-label="Live race">
+      <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
+      {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
+        const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status };
+        return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
+      })}</div>}
+    </section>
     <section className="live-events" aria-label="Live events">
       <div className="live-events__heading"><h2>Live events</h2><span className="live-events__status">Always watching</span></div>
       {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => {
@@ -278,17 +280,6 @@ function MapFitTrips({ points }: { points: Array<{ lat: number; lon: number }> }
   return null;
 }
 
-function MapFocusTrip({ points }: { points: Array<{ lat: number; lon: number }> }) {
-  const map = useMap();
-  const focusKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
-  useEffect(() => {
-    if (!points.length) return;
-    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
-  }, [map, focusKey]);
-  return null;
-}
-
 function decodePolyline(encoded: string): Array<{ lat: number; lon: number }> {
   const points: Array<{ lat: number; lon: number }> = [];
   let index = 0; let lat = 0; let lon = 0;
@@ -326,13 +317,11 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
     return { journey, points, endpoints };
   }).filter((route) => route.points.length > 0);
   const allPoints = routes.flatMap((route) => route.points);
-  const selectedPoints = routes.find((route) => route.journey.id === selectedTrainId)?.points ?? [];
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
 
   return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
     <MapResizeHandler />
     <MapFitTrips points={allPoints} />
-    <MapFocusTrip points={selectedPoints} />
     <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
     {[...routes].sort((a, b) => {
       const aEntry = liveEntries.find((entry) => entry.trainId === a.journey.id);

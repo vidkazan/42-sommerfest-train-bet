@@ -31,14 +31,15 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .ds-badge-button:disabled { cursor: wait; opacity: .6; }
 .map-label { bottom: 1rem; color: var(--ds-text-muted); left: 1rem; position: absolute; }
 .ds-card, .card { background: var(--ds-surface-muted); border: 1px solid var(--ds-border-subtle); border-radius: var(--ds-radius-lg); box-shadow: var(--ds-shadow); padding: var(--ds-space-5); }
-.progress-view { background: transparent; border-radius: var(--ds-radius-lg); display: flex; flex-direction: column; padding: 0; }
+.progress-view { background: transparent; border-radius: var(--ds-radius-lg); display: grid; gap: var(--ds-space-4); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); padding: 0; }
+.progress-race { min-height: 0; overflow-y: auto; }
 .progress-meta { align-items: center; display: flex; gap: var(--ds-space-3); justify-content: space-between; margin-bottom: var(--ds-space-4); }
 .progress-meta .ds-notice { margin: 0; }
-.live-events { background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); margin-top: var(--ds-space-5); padding: var(--ds-space-3); }
+.live-events { background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); display: flex; flex-direction: column; min-height: 0; padding: var(--ds-space-3); }
 .live-events__heading { align-items: center; display: flex; justify-content: space-between; }
 .live-events h2 { font-size: var(--ds-font-large); margin: 0 0 var(--ds-space-2); }
 .live-events__status { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
-.live-events__list { display: grid; gap: var(--ds-space-2); }
+.live-events__list { display: grid; gap: var(--ds-space-2); min-height: 0; overflow-y: auto; }
 .live-event { align-items: start; background: color-mix(in srgb, var(--ds-surface-muted) 45%, var(--ds-surface) 55%); border-radius: var(--ds-radius-md); display: grid; gap: var(--ds-space-2); grid-template-columns: auto 1fr auto; padding: var(--ds-space-3); }
 .live-event.selectable { cursor: pointer; }
 .live-event.selectable:hover { background: color-mix(in srgb, var(--ds-focus-ring) 12%, var(--ds-surface-muted) 88%); }
@@ -164,6 +165,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
   .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }
   .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view { overflow: visible; }
+  .public-shell > .ds-card > .progress-view { grid-template-rows: minmax(260px, auto) minmax(220px, auto); }
   .public-shell .bet-name-form { min-height: 0; }
   .public-shell .bet-selection { flex: none; }
   .public-shell .bet-selection__list { overflow: visible; }

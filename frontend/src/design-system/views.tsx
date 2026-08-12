@@ -194,12 +194,14 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
     return (right.finalDelayMinutes ?? -Infinity) - (left.finalDelayMinutes ?? -Infinity);
   }).map((entry, index, sorted) => ({ ...entry, position: !entry.cancelled && entry.finalDelayMinutes !== null ? (index === 0 || entry.finalDelayMinutes !== sorted[index - 1].finalDelayMinutes ? index + 1 : sorted[index - 1].position) : null })) : entries;
   const prioritizedEntries = prioritizeCurrentBet(finalEntries, currentParticipantId);
+  const currentBetEntry = finalEntries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId));
+  const currentBetPlace = currentBetEntry?.position ?? myBetPlace;
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="leaderboard-view" aria-label="Leaderboard">
     <h2>{final ? "Final standings" : "Who’s betting on each train?"}</h2>
     {final && finalStatus === "finished" && myUsername && <div className="results-my-bet">
       <Badge variant="blue">{myUsername}</Badge>
-      <strong className="results-my-bet__status">{myBetPlace ? `${myBetWon ? "You got" : "You did not win — you got"} ${formatPlace(myBetPlace)}` : "You did not win"}</strong>
+      <strong className="results-my-bet__status">{currentBetPlace ? `${myBetWon ? "You got" : "You did not win — you got"} ${formatPlace(currentBetPlace)}` : "You did not win"}</strong>
     </div>}
     {final && finalStatus === "no_winner" && <Notice>No winner — every selected train was cancelled.</Notice>}
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>

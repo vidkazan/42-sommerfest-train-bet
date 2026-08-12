@@ -331,6 +331,8 @@ function App() {
     );
   }
 
+  const myTrainId = leaderboard.find((entry) => entry.bettors.some((bettor) => bettor.participantId === storedUserId))?.trainId ?? null;
+
   return (
     <main className="app-shell public-shell">
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
@@ -359,10 +361,10 @@ function App() {
           final={Boolean(results?.final && results.status !== "pending")}
           finalStatus={results?.status}
           myUsername={username}
-          myBetPlace={leaderboard.find((entry) => entry.trainId === selectedTrainId)?.position ?? null}
-          myBetWon={Boolean(results?.winners.some((winner) => winner.trainId === selectedTrainId))}
+          myBetPlace={leaderboard.find((entry) => entry.trainId === myTrainId)?.position ?? null}
+          myBetWon={Boolean(results?.winners.some((winner) => winner.trainId === myTrainId))}
         />}
-        {betSubmitted && publicView === "events" && !loading && !error && <LiveEventsView myTrainId={leaderboard.find((entry) => entry.bettors.some((bettor) => bettor.participantId === storedUserId))?.trainId ?? null} events={liveEvents} onSelectTrain={selectTrain} />}
+        {betSubmitted && publicView === "events" && !loading && !error && <LiveEventsView myTrainId={myTrainId} events={liveEvents} onSelectTrain={selectTrain} />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}

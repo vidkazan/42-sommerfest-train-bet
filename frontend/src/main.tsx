@@ -1,7 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
-import { Drawer } from "vaul";
 import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
 import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveLeaderboardView, Notice, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
@@ -15,7 +14,6 @@ function App() {
   const publicGameId = gamePathMatch?.[1] ?? null;
   const mode: AppMode = window.location.pathname === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
   const [publicView, setPublicView] = useState<PublicView>("browse");
-  const [activePublicSnapPoint, setActivePublicSnapPoint] = useState<number | string | null>("78%");
   const [adminView, setAdminView] = useState<AdminView>("access");
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [adminInput, setAdminInput] = useState("");
@@ -341,19 +339,7 @@ function App() {
           ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} selectionVersion={selectionVersion} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
-      <Drawer.Root
-        open
-        modal={false}
-        dismissible={false}
-        snapPoints={["42%", "78%", "94%"]}
-        activeSnapPoint={activePublicSnapPoint}
-        setActiveSnapPoint={setActivePublicSnapPoint}
-        noBodyStyles
-        repositionInputs={false}
-      >
-        <Drawer.Content className="public-panel-drawer" aria-label="Game panel">
-          <Drawer.Handle className="public-panel-drawer__handle" />
-          <Card>
+      <Card>
         <nav className="view-tabs" aria-label="Game views">
           {!betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
@@ -382,9 +368,7 @@ function App() {
             <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={selectTrain} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}
-          </Card>
-        </Drawer.Content>
-      </Drawer.Root>
+      </Card>
     </main>
   );
 }

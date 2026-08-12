@@ -65,7 +65,7 @@ function App() {
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [leaderboardStale, setLeaderboardStale] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
-  const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }>; trains: unknown[] } | null>(null);
+  const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; trains: unknown[] } | null>(null);
 
   const selectTrain = (trainId: string) => {
     setSelectedTrainId(trainId);
@@ -347,7 +347,12 @@ function App() {
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} events={liveEvents} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
-        {publicView === "result" && !loading && !error && <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} />}
+        {publicView === "result" && !loading && !error && (() => {
+          const myTrain = journeys.find((journey) => journey.id === selectedTrainId);
+          const myBetPlace = leaderboard.find((entry) => entry.trainId === selectedTrainId)?.position ?? null;
+          const myBetWon = Boolean(results?.winners.some((winner) => winner.trainId === selectedTrainId));
+          return <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} myUsername={username} myTrainName={myTrain?.displayName ?? null} myTrainDelayMinutes={myTrain?.finalDelayMinutes ?? null} myBetPlace={myBetPlace} myBetWon={myBetWon} />;
+        })()}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}

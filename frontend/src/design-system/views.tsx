@@ -20,7 +20,7 @@ export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string |
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; events: LiveEvent[] };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
-export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number }> };
+export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void };
 export type AdminSetupViewProps = {
@@ -113,6 +113,11 @@ function eventAge(createdAt: string) {
   return minutes === 0 ? "just now" : `${minutes} min ago`;
 }
 
+function formatPlace(position: number) {
+  const suffix = position % 100 >= 11 && position % 100 <= 13 ? "th" : position % 10 === 1 ? "st" : position % 10 === 2 ? "nd" : position % 10 === 3 ? "rd" : "th";
+  return `${position}${suffix} place`;
+}
+
 export function LiveLeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, events }: LiveLeaderboardViewProps) {
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
   const myTrainId = entries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId))?.trainId;
@@ -168,12 +173,23 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
   </section>;
 }
 
-export function ResultsView({ status, final, winners }: ResultsViewProps) {
+export function ResultsView({ status, final, winners, myUsername, myTrainName, myTrainDelayMinutes, myBetPlace, myBetWon }: ResultsViewProps) {
+  const placeBadge = (index: number) => <Badge variant={index === 0 ? "red" : index === 1 ? "orange" : index === 2 ? "yellow" : "secondary"}>{formatPlace(index + 1)}</Badge>;
   return <section aria-label="Final results">
     <h2>Results</h2>
     {!final || status === "pending" ? <Notice>Waiting for all trains to reach their final station.</Notice>
       : status === "no_winner" ? <Notice>No winner — every selected train was cancelled.</Notice>
-        : <div className="winner-result"><div className="confetti" aria-hidden="true">🎉 🎊 ✨ <TrainIcon decorative /> ✨ 🎊 🎉</div><Notice>Winner{winners.length > 1 ? "s" : ""}</Notice><ol>{winners.map((winner) => <li key={winner.username}>{winner.username} · {Math.round(winner.delaySeconds / 60)} min delay</li>)}</ol></div>}
+        : <div className="winner-result">
+          <div className="results-my-bet">
+            <Badge variant="blue">{myUsername}</Badge>
+            <strong className="results-my-bet__status">{myBetPlace ? `${myBetWon ? "You got" : "You did not win — you got"} ${formatPlace(myBetPlace)}` : "You did not win"}</strong>
+          </div>
+          <div className="results-winner-list">{winners.map((winner, index) => <article className="results-winner-cell" key={`${winner.username}-${index}`}>
+            <div className="results-winner-cell__top">{winner.position ? <Badge variant={winner.position === 1 ? "red" : winner.position === 2 ? "orange" : winner.position === 3 ? "yellow" : "secondary"}>{formatPlace(winner.position)}</Badge> : placeBadge(index)}</div>
+            <div className="results-winner-cell__bottom"><span>+{Math.round(winner.delaySeconds / 60)} min</span><span>{winner.trainName ?? "Train"}</span></div>
+            <div className="results-winner-cell__bettors">{winner.bettors?.join(" · ") ?? winner.username}</div>
+          </article>)}</div>
+        </div>}
   </section>;
 }
 
@@ -354,12 +370,13 @@ export function TrainMapView({ journeys, selectedTrainId, selectionVersion, live
       const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
       const raceDelayMinutes = live?.raceDelayMinutes ?? journey.raceDelayMinutes ?? null;
       const cancelled = live?.cancelled ?? journey.liveStatus === "cancelled";
+      const finished = live?.status === "arrived" || journey.liveStatus === "arrived";
       const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
       const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
       const markerIndex = Math.min(points.length - 1, Math.floor(progress * (points.length - 1)));
       const markerPoint = points[markerIndex];
       const markerDirection = directionAngle(points, markerIndex);
-      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">➜</span></span>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker" aria-label="${finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 24], iconAnchor: [12, 12] });
       return <Fragment key={journey.id}>
         <Polyline positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine ? 6 : 3, opacity: selected || isMine ? 1 : 0.85 }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>

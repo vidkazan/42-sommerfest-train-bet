@@ -692,7 +692,7 @@ const refreshGameProgress = async (game: GameRow) => {
     FROM game_journeys j
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id) as Array<{ id: string; tripId: string; displayName: string; scheduledArrival: string; scheduledDeparture: string; previousStatus: string; previousCurrentDelay: number | null; previousRaceDelay: number | null; previousFinalDelay: number | null; previousGainBand: string }>;
-  const previousRanks = db.prepare(`SELECT id, ROW_NUMBER() OVER (ORDER BY race_delay_minutes DESC, id ASC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; position: number }>;
+  const previousRanks = db.prepare(`SELECT id, RANK() OVER (ORDER BY race_delay_minutes DESC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; position: number }>;
   const previousLeader = previousRanks.find((rank) => rank.position === 1);
   const results = await Promise.allSettled(rows.map((row) => transitDataSource.getLiveTrip(row.tripId)));
   const fetchedAt = new Date().toISOString();
@@ -747,7 +747,7 @@ const refreshGameProgress = async (game: GameRow) => {
     }
     const nextLeader = db.prepare(`SELECT id, display_name AS displayName FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL ORDER BY race_delay_minutes DESC, id ASC LIMIT 1`).get(game.id) as { id: string; displayName: string } | undefined;
     if (nextLeader && nextLeader.id !== previousLeader?.id) addLiveEvent(game.id, "new_leader", { trainId: nextLeader.id, displayName: nextLeader.displayName, title: eventPhrase("leader", nextLeader.displayName, `${game.id}:${nextLeader.id}`), message: "The delay race has a new front-runner.", severity: "warning", source: "generated" }, `${game.id}:leader:${nextLeader.id}`, fetchedAt);
-    const nextRanks = db.prepare(`SELECT id, display_name AS displayName, race_delay_minutes AS delayMinutes, ROW_NUMBER() OVER (ORDER BY race_delay_minutes DESC, id ASC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; displayName: string; delayMinutes: number; position: number }>;
+    const nextRanks = db.prepare(`SELECT id, display_name AS displayName, race_delay_minutes AS delayMinutes, RANK() OVER (ORDER BY race_delay_minutes DESC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; displayName: string; delayMinutes: number; position: number }>;
     for (const rank of nextRanks) {
       const oldPosition = previousRanks.find((previous) => previous.id === rank.id)?.position;
       if ((rank.position === 2 || rank.position === 3) && oldPosition !== rank.position) {
@@ -846,19 +846,19 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
     if (!aValid || !bValid) return 0;
     return (b.raceDelayMinutes as number) - (a.raceDelayMinutes as number);
   });
-  let previousDelay: number | null = null;
+  let previousRaceDelay: number | null = null;
   let position = 0;
-  const entries = trains.map((entry, index) => {
-    const valid = entry.status !== "cancelled" && entry.raceDelayMinutes !== null;
-    if (valid && entry.raceDelayMinutes !== previousDelay) position = index + 1;
-    previousDelay = entry.raceDelayMinutes;
-    return { ...entry, position: valid ? position : null };
+  const rankedTrains = trains.map((train, index) => {
+    const valid = train.status !== "cancelled" && train.raceDelayMinutes !== null;
+    if (valid && train.raceDelayMinutes !== previousRaceDelay) position = index + 1;
+    previousRaceDelay = train.raceDelayMinutes;
+    return { ...train, position: valid ? position : null };
   });
   const lastUpdatedAt = db.prepare("SELECT MAX(last_live_update) AS value FROM game_journeys WHERE game_id = ?").get(game.id) as { value: string | null };
   return {
-    entries: entries.map((entry) => ({ ...entry, cancelled: entry.status === "cancelled", stale: entry.status === "stale" })),
+    entries: rankedTrains.map((entry) => ({ ...entry, cancelled: entry.status === "cancelled", stale: entry.status === "stale" })),
     lastUpdatedAt: lastUpdatedAt.value,
-    stale: entries.some((entry) => entry.status === "stale"),
+    stale: rankedTrains.some((entry) => entry.status === "stale"),
   };
 });
 
@@ -879,12 +879,19 @@ app.get<{ Querystring: { gameId?: string } }>("/api/results", async (request, re
   const scored = updates.filter((train) => train.status === "arrived" && train.finalDelayMinutes !== null);
   if (scored.length === 0) return { status: "no_winner", final: true, winners: [], trains: updates };
   const maxDelayMinutes = Math.max(...scored.map((train) => train.finalDelayMinutes as number));
-  const winners = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId FROM bets b
-    JOIN participants p ON p.id = b.participant_id WHERE b.game_id = ?`).all(game.id) as Array<{ username: string; trainId: string }>;
+  const finalRanks = [...scored].sort((left, right) => (right.finalDelayMinutes as number) - (left.finalDelayMinutes as number)).map((train, index, sorted) => ({
+    id: train.id,
+    position: index === 0 || train.finalDelayMinutes !== sorted[index - 1].finalDelayMinutes ? index + 1 : 0,
+  })).reduce((ranks, rank, index, all) => { ranks.set(rank.id, rank.position || ranks.get(all[index - 1]?.id) || index + 1); return ranks; }, new Map<string, number>());
+  const winners = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId, j.display_name AS trainName FROM bets b
+    JOIN participants p ON p.id = b.participant_id JOIN game_journeys j ON j.id = b.train_id WHERE b.game_id = ?`).all(game.id) as Array<{ username: string; trainId: string; trainName: string }>;
+  const winnerTrainIds = new Set(scored.filter((train) => train.finalDelayMinutes === maxDelayMinutes).map((train) => train.id));
+  const winnerBettors = new Map<string, string[]>();
+  for (const winner of winners) if (winnerTrainIds.has(winner.trainId)) winnerBettors.set(winner.trainId, [...(winnerBettors.get(winner.trainId) ?? []), winner.username]);
   return {
     status: "finished", final: true,
     winners: winners.filter((winner) => scored.some((train) => train.id === winner.trainId && train.finalDelayMinutes === maxDelayMinutes))
-      .map((winner) => ({ ...winner, delaySeconds: maxDelayMinutes * 60 })),
+      .map((winner) => ({ ...winner, position: finalRanks.get(winner.trainId) ?? 1, delaySeconds: maxDelayMinutes * 60, bettors: winnerBettors.get(winner.trainId) ?? [winner.username] })),
     trains: updates,
   };
 });

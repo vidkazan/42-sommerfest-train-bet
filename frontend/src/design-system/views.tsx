@@ -7,7 +7,7 @@ import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./co
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 
-export type PublicView = "browse" | "progress" | "leaderboard" | "events";
+export type PublicView = "browse" | "progress" | "race" | "leaderboard" | "events";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
 export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
@@ -21,6 +21,7 @@ export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; selectedTrainId: string | null; final?: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void };
@@ -146,6 +147,34 @@ export function LiveEventsView({ myTrainId, events, onSelectTrain }: LiveEventsV
         <time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>
       </article>})}</div>}
     </section>;
+}
+
+export function RaceChartView({ entries, selectedTrainId, final = false }: RaceChartViewProps) {
+  const sorted = [...entries].sort((left, right) => {
+    const leftDelay = final ? left.finalDelayMinutes : left.raceDelayMinutes;
+    const rightDelay = final ? right.finalDelayMinutes : right.raceDelayMinutes;
+    return (rightDelay ?? -Infinity) - (leftDelay ?? -Infinity);
+  });
+  const maxDelay = Math.max(0, ...sorted.map((entry) => Math.max(0, final ? entry.finalDelayMinutes ?? 0 : entry.raceDelayMinutes ?? 0)));
+  const axisMax = maxDelay <= 10 ? 10 : Math.ceil(maxDelay / 10) * 10;
+  const gridSteps = [0, 25, 50, 75, 100];
+  return <section className="race-chart-view" aria-label="Delay race">
+    <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div></header>
+    <div className="race-chart__axis" aria-hidden="true"><span className="race-chart__axis-spacer" />{gridSteps.map((step) => <span key={step}>{Math.round(axisMax * step / 100)} min</span>)}</div>
+    <div className="race-chart__plot">
+      {gridSteps.map((step) => <span className="race-chart__grid-line" key={step} style={{ left: `calc(var(--race-label-width) + (100% - var(--race-label-width)) * ${step / 100})` }} />)}
+      {sorted.map((entry) => {
+        const delay = final ? entry.finalDelayMinutes : entry.raceDelayMinutes;
+        const positiveDelay = Math.max(0, delay ?? 0);
+        const width = axisMax ? (positiveDelay / axisMax) * 100 : 0;
+        const mine = entry.trainId === selectedTrainId;
+        return <div className={`race-chart__row ${mine ? "mine" : ""}`.trim()} key={entry.trainId}>
+          <div className="race-chart__label"><span>{entry.displayName}</span>{mine && <Badge variant="blue">My train</Badge>}</div>
+          <div className="race-chart__bar-area"><span className="race-chart__bar" style={{ width: `${width}%` }} /><span className="race-chart__value">{delay === null || delay === undefined ? "—" : `${delay >= 0 ? "+" : "−"}${Math.abs(delay)} min`}</span></div>
+        </div>;
+      })}
+    </div>
+  </section>;
 }
 
 export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, final = false, finalStatus, myUsername, myBetPlace, myBetWon }: LeaderboardViewProps) {

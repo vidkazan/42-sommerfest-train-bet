@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, RaceChartView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
@@ -343,10 +343,12 @@ function App() {
         <nav className="view-tabs" aria-label="Game views">
           {!betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
+          {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "race" ? "active" : ""}`.trim()} onClick={() => setPublicView("race")}>Race</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {betSubmitted && publicView === "race" && !loading && !error && <RaceChartView entries={leaderboard} selectedTrainId={selectedTrainId} final={Boolean(results?.final && results.status !== "pending")} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView
           entries={leaderboard}
           currentParticipantId={storedUserId}

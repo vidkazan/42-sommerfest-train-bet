@@ -52,15 +52,11 @@ export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps)
 }
 
 export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, usernameCheckLoading, usernameCheckError, onSelectTrain, onUsernameChange, onCheckUsername, onSubmit }: BetViewProps) {
-  const [nameConfirmed, setNameConfirmed] = useState(false);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedTrainId) return;
     document.querySelector(`[data-journey-id="${selectedTrainId}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [selectedTrainId]);
-
-  useEffect(() => {
-    setNameConfirmed(false);
   }, [selectedTrainId]);
 
   return <>
@@ -73,20 +69,23 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
         {journeys.map((journey) => <JourneyCard key={journey.id} journey={journey} mode="public" selected={selectedTrainId === journey.id} disabled={betSubmitted} onSelect={(selectedJourney) => onSelectTrain(selectedJourney.id)} />)}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {selectedTrainId && !nameConfirmed && <form className="bet-form" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setNameConfirmed(true); }}>
-        <p className="ds-text-medium">What’s your name?</p>
+      <form className="bet-form bet-selection__actions" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setConfirmationOpen(true); }}>
         <label className="field-label" htmlFor="username">Username</label>
         <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
         {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
-        <BadgeButton type="submit" className="ds-text-huge" disabled={usernameCheckLoading}>{usernameCheckLoading ? "Checking…" : "Continue"}</BadgeButton>
-      </form>}
-      {selectedTrainId && nameConfirmed && <>
-        <p className="bet-selection__username ds-text-medium">Ready to confirm as {username}.</p>
-        <Notice className="bet-rules">Your train must accumulate the most delay by its final stop. Cancelled trains are out of the race. Ties share the win.</Notice>
-        <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
-          <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={loading}>{loading ? "Submitting…" : `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}`}</BadgeButton>
-        </form>
-      </>}
+        <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={usernameCheckLoading || !selectedTrainId}>{usernameCheckLoading ? "Checking…" : selectedTrainId ? `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}` : "Select a train"}</BadgeButton>
+      </form>
+      {confirmationOpen && selectedTrainId && <dialog className="bet-confirmation" open aria-labelledby="bet-confirmation-title">
+        <div className="bet-confirmation__panel">
+          <h2 id="bet-confirmation-title">Confirm your bet</h2>
+          <p className="ds-text-medium">You’re betting on <strong>{journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "this train"}</strong> as <strong>{username}</strong>.</p>
+          <Notice className="bet-rules">The train with the biggest actual delay at its final stop wins. Cancelled trains are out of the race. Ties share the win.</Notice>
+          <div className="bet-confirmation__actions">
+            <BadgeButton type="button" className="bet-confirmation__back" onClick={() => setConfirmationOpen(false)} disabled={loading}>Go back</BadgeButton>
+            <BadgeButton type="button" className="bet-confirmation__submit" onClick={() => onSubmit()} disabled={loading}>{loading ? "Submitting…" : "Confirm bet"}</BadgeButton>
+          </div>
+        </div>
+      </dialog>}
     </div>}
   </>;
 }

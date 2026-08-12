@@ -705,12 +705,12 @@ const refreshGameProgress = async (game: GameRow) => {
       ? Math.round((actualTimestamp - scheduledTimestamp) / 60000) : null;
     const actualDepartureTimestamp = result.value.actualDeparture ? Date.parse(result.value.actualDeparture) : NaN;
     const scheduledDepartureTimestamp = Date.parse(row.scheduledDeparture);
+    const departureHasPassed = Number.isFinite(scheduledDepartureTimestamp) && scheduledDepartureTimestamp <= Date.now();
     const departureDelayMinutes = result.value.departureDelayMinutes ?? (Number.isFinite(actualDepartureTimestamp) && Number.isFinite(scheduledDepartureTimestamp)
       ? Math.round((actualDepartureTimestamp - scheduledDepartureTimestamp) / 60000) : null);
-    const currentDelayMinutes = result.value.currentDelayMinutes ?? finalDelayMinutes;
-    const raceDelayMinutes = currentDelayMinutes !== null && departureDelayMinutes !== null ? currentDelayMinutes - departureDelayMinutes : null;
+    const currentDelayMinutes = departureHasPassed ? (result.value.currentDelayMinutes ?? (result.value.arrived ? finalDelayMinutes : null)) : null;
+    const raceDelayMinutes = currentDelayMinutes;
     const delayGainBand = row.previousGainBand;
-    const departureHasPassed = Number.isFinite(Date.parse(row.scheduledDeparture)) && Date.parse(row.scheduledDeparture) <= Date.now();
     return { ...row, actualArrival: result.value.actualArrival, actualDeparture: result.value.actualDeparture ?? null, currentDelayMinutes, departureDelayMinutes, raceDelayMinutes, finalDelayMinutes, geometry: result.value.geometry, endpoints: result.value.endpoints, alerts: result.value.alerts, delayGainBand,
       status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : departureHasPassed ? "in_progress" : "waiting_for_departure", error: null };
   });
@@ -827,8 +827,8 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
       j.stop_count AS stopCount, j.actual_arrival AS actualArrival, j.race_delay_minutes AS raceDelayMinutes, j.final_delay_minutes AS finalDelayMinutes,
       j.current_delay_minutes AS currentDelayMinutes, j.departure_delay_minutes AS departureDelayMinutes, j.live_status AS status
     FROM game_journeys j
-    LEFT JOIN bets b ON b.train_id = j.id AND b.game_id = ?
-    LEFT JOIN participants p ON p.id = b.participant_id
+    JOIN bets b ON b.train_id = j.id AND b.game_id = ?
+    JOIN participants p ON p.id = b.participant_id
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id, game.id) as Array<{ participantId: string | null; username: string | null; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string }>;
   ranked.sort((a, b) => (b.raceDelayMinutes ?? -Infinity) - (a.raceDelayMinutes ?? -Infinity));
@@ -840,8 +840,8 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
   }])).values()];
   for (const entry of ranked) if (entry.participantId && entry.username) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });
   trains.sort((a, b) => {
-    const aValid = a.status !== "cancelled" && a.raceDelayMinutes !== null;
-    const bValid = b.status !== "cancelled" && b.raceDelayMinutes !== null;
+    const aValid = a.status !== "cancelled" && a.status !== "waiting_for_departure" && a.raceDelayMinutes !== null;
+    const bValid = b.status !== "cancelled" && b.status !== "waiting_for_departure" && b.raceDelayMinutes !== null;
     if (aValid !== bValid) return Number(bValid) - Number(aValid);
     if (!aValid || !bValid) return 0;
     return (b.raceDelayMinutes as number) - (a.raceDelayMinutes as number);
@@ -849,7 +849,7 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
   let previousRaceDelay: number | null = null;
   let position = 0;
   const rankedTrains = trains.map((train, index) => {
-    const valid = train.status !== "cancelled" && train.raceDelayMinutes !== null;
+    const valid = train.status !== "cancelled" && train.status !== "waiting_for_departure" && train.raceDelayMinutes !== null;
     if (valid && train.raceDelayMinutes !== previousRaceDelay) position = index + 1;
     previousRaceDelay = train.raceDelayMinutes;
     return { ...train, position: valid ? position : null };

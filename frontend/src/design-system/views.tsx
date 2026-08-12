@@ -378,7 +378,7 @@ export function TrainMapView({ journeys, selectedTrainId, selectionVersion, live
       const live = liveEntries.find((train) => train.trainId === journey.id);
       const isMine = live?.bettors.some((bettor) => bettor.participantId === currentParticipantId) ?? false;
       const rankColor = live?.position === 1 ? "#DD2222" : live?.position === 2 ? "#F97316" : live?.position === 3 ? "#DD9900" : null;
-      const lineColor = selected && rankColor ? rankColor : selected && isMine ? "#105182" : colors.map.route;
+      const lineColor = selected && rankColor ? rankColor : selected && isMine ? "#105182" : selected ? "#333" : colors.map.route;
       const markerColor = live?.position === 1 ? colors.fill.red : live?.position === 2 ? "#f97316" : live?.position === 3 ? colors.fill.yellow : isMine ? colors.transport.u : colors.map.train;
       const departure = Date.parse(journey.scheduledDeparture);
       const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;

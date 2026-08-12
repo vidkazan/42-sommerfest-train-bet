@@ -58,6 +58,9 @@ export type LiveEvent = {
   severity: "info" | "warning" | "severe";
   source: "generated" | "motis";
   displayName?: string;
+  currentDelayMinutes?: number | null;
+  previousDelayMinutes?: number | null;
+  changeMinutes?: number | null;
   createdAt: string;
 };
 

@@ -348,7 +348,7 @@ function App() {
           {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
-        {betSubmitted && publicView === "race" && !loading && !error && <RaceChartView entries={leaderboard} selectedTrainId={selectedTrainId} final={Boolean(results?.final && results.status !== "pending")} />}
+        {betSubmitted && publicView === "race" && !loading && !error && <RaceChartView entries={leaderboard} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView
           entries={leaderboard}
           currentParticipantId={storedUserId}

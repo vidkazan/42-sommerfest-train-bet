@@ -19,6 +19,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .map-placeholder { align-items: center; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-lg); display: flex; flex: 1; justify-content: center; min-height: 52vh; position: relative; }
 .train-map { border-radius: var(--ds-radius-lg); height: clamp(320px, 58vh, 640px); overflow: hidden; width: 100%; }
 .train-map__marker-icon { background: transparent; border: 0; }
+.train-map__marker-label { background: var(--train-marker-color); border: 1px solid rgb(255 255 255 / 75%); border-radius: var(--ds-radius-sm); color: #fff; display: block; font-size: .65rem; font-weight: 700; left: 50%; line-height: 1.1; padding: .15rem .3rem; position: absolute; top: 0; transform: translate(-50%, -100%); white-space: nowrap; }
 .train-map__marker { align-items: center; background: var(--train-marker-color); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); display: flex; height: 24px; justify-content: center; width: 24px; }
 .train-map__marker-arrow { color: #fff; display: block; font-size: 14px; font-weight: 700; line-height: 1; transform: rotate(calc(var(--train-marker-angle) - 90deg)); transform-origin: center; }
 .train-map__marker[aria-label="Train finished"] .train-map__marker-arrow { font-size: 15px; transform: none; }
@@ -54,7 +55,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .progress-race { min-height: 0; overflow-y: auto; }
 .progress-meta { align-items: center; display: flex; gap: var(--ds-space-3); justify-content: space-between; margin-bottom: var(--ds-space-4); }
 .progress-meta .ds-notice { margin: 0; }
-.live-events { background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); display: flex; flex-direction: column; min-height: 0; padding: var(--ds-space-3); }
+.live-events { display: flex; flex-direction: column; min-height: 0; }
 .live-events-view { overflow-y: auto; }
 .live-events__heading { align-items: center; display: flex; justify-content: space-between; }
 .live-events h2 { font-size: var(--ds-font-large); margin: 0 0 var(--ds-space-2); }
@@ -62,14 +63,22 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .live-events__filter input { accent-color: var(--ds-accent-blue); margin: 0; width: auto; }
 .live-events__status { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
 .live-events__list { display: grid; gap: var(--ds-space-2); min-height: 0; overflow-y: auto; }
-.live-event { align-items: start; background: color-mix(in srgb, var(--ds-surface-muted) 45%, var(--ds-surface) 55%); border-radius: var(--ds-radius-md); display: grid; gap: var(--ds-space-2); grid-template-columns: auto 1fr auto; padding: var(--ds-space-3); }
+.live-event { align-items: start; background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); display: block; min-height: 8rem; padding: var(--ds-space-3); }
 .live-event.selectable { cursor: pointer; }
 .live-event.selectable:hover { background: color-mix(in srgb, var(--ds-focus-ring) 12%, var(--ds-surface-muted) 88%); }
 .live-event.selectable:focus-visible { outline: 2px solid var(--ds-focus-ring); outline-offset: 2px; }
 .live-event__badges { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ds-space-1); }
 .live-event .ds-badge { font-size: var(--ds-font-small); line-height: 1.25; min-height: 1.75rem; }
 .live-event strong { display: block; }
-.live-event p { color: var(--ds-text-muted); font-size: var(--ds-font-small); margin: var(--ds-space-1) 0 0; }
+.live-event__top { align-items: center; display: flex; gap: var(--ds-space-2); }
+.live-event__top strong { flex: 1; font-size: var(--ds-font-medium); }
+.live-event__top time { flex: 0 0 auto; }
+.live-event__my-train { font-size: var(--ds-font-small) !important; min-height: 1.5rem !important; }
+.live-event__numbers { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ds-space-3); margin-top: var(--ds-space-3); }
+.live-event__delay { font-size: var(--ds-font-small); font-weight: 700; }
+.live-event__delay--warning, .live-event__delay--severe { color: var(--ds-danger-soft); }
+.live-event__change { background: color-mix(in srgb, var(--chew-fill-green-primary) 35%, transparent); border-radius: var(--ds-radius-sm); color: var(--ds-text-primary); display: inline-flex; font-size: var(--ds-font-small); font-weight: 700; padding: var(--ds-space-1) var(--ds-space-2); }
+.live-event__message { color: var(--ds-text-muted); font-size: var(--ds-font-small); margin: var(--ds-space-2) 0 0; }
 .live-event time { color: var(--ds-text-muted); font-size: var(--ds-font-small); white-space: nowrap; }
 .live-events__empty { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
 .leaderboard-view { padding: 0; }
@@ -84,7 +93,8 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .ds-journey-card__labels .ds-badge, .leaderboard-row .ds-badge { line-height: 1.25; min-height: 1.75rem; }
 .leaderboard-row__empty { color: var(--ds-text-muted); display: block; font-size: var(--ds-font-small); margin-top: var(--ds-space-2); }
 .ds-card p, .card p { color: var(--ds-text-muted); }
-.view-tabs { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); margin-bottom: var(--ds-space-4); }
+.view-tabs { display: flex; flex-wrap: nowrap; gap: var(--ds-space-2); margin-bottom: var(--ds-space-4); overflow-x: auto; padding-bottom: .125rem; scrollbar-width: none; }
+.view-tabs::-webkit-scrollbar { display: none; }
 .view-tabs .ds-badge-button { margin-top: 0; }
 .view-tabs .ds-badge-button.ds-text-huge { font-size: var(--ds-font-medium); }
 .view-tabs button.secondary { background: var(--ds-surface-muted); color: var(--ds-text-primary); }
@@ -195,7 +205,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .results-winner-cell__bottom strong, .results-winner-cell__bottom span { font-size: var(--ds-font-medium); }
 .results-winner-cell__bottom { gap: var(--ds-space-3); }
 .results-winner-cell__bettors { color: var(--ds-text-muted); font-size: var(--ds-font-medium); margin-top: var(--ds-space-2); }
-.view-tabs .ds-badge-button { align-items: center; background: var(--ds-surface-muted); border: 1px solid var(--ds-border); display: inline-flex; height: 2.75rem; justify-content: center; margin: 0; min-width: 7.5rem; padding: 0 var(--ds-space-3); }
+.view-tabs .ds-badge-button { align-items: center; background: var(--ds-surface-muted); border: 1px solid var(--ds-border); display: inline-flex; flex: 0 0 auto; height: 2.5rem; justify-content: center; margin: 0; min-width: auto; padding: 0 var(--ds-space-3); white-space: nowrap; }
 .view-tabs .ds-badge-button.active { background: var(--ds-accent-blue); color: #fff; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 @media (max-width: 560px) { .inline-form { flex-direction: column; } .inline-form button { width: 100%; } }
@@ -203,7 +213,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .app-shell { gap: var(--ds-space-3); padding: var(--ds-space-2); }
   .public-shell > .ds-card { padding: var(--ds-space-3); }
   .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
-  .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
+  .public-shell .train-map { height: clamp(165px, 25.5vh, 270px); }
   .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }
   .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > .live-events-view { overflow: visible; }
   .public-shell > .ds-card > .race-chart-view { overflow: visible; }

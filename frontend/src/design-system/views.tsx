@@ -21,7 +21,7 @@ export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
-export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; selectedTrainId: string | null; final?: boolean };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; final?: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void };
@@ -141,15 +141,24 @@ export function LiveEventsView({ myTrainId, events, onSelectTrain }: LiveEventsV
       {!visibleEvents.length ? <p className="live-events__empty">{onlyMyTrain ? "No events for your train yet." : "No drama yet. The trains are behaving."}</p> : <div className="live-events__list">{visibleEvents.map((event) => {
         const selectable = Boolean(event.trainId);
         const selectEventTrain = () => { if (event.trainId) onSelectTrain(event.trainId); };
+        const numericEvent = event.currentDelayMinutes !== undefined && event.currentDelayMinutes !== null;
+        const currentDelay = numericEvent ? event.currentDelayMinutes : null;
+        const change = event.changeMinutes ?? null;
+        const changeLabel = change === null ? "—" : `${change > 0 ? "↑ " : change < 0 ? "↓ " : "— "}${Math.abs(change)} min`;
+        const title = (event.displayName ?? event.title).split(" ")[0];
         return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>
-        <div className="live-event__badges">{event.source === "motis" && <Badge variant={eventVariant(event)}>MOTIS</Badge>}{event.trainId === myTrainId && <Badge variant="blue">My train</Badge>}</div>
-        <div><strong>{event.title}</strong><p>{event.message}</p></div>
-        <time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>
+        <div className="live-event__body">
+          <div className="live-event__top"><strong>{title}</strong><time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My train</Badge>}</div>
+          <div className="live-event__numbers">{numericEvent ? <strong className={`live-event__delay live-event__delay--${event.severity}`}>{currentDelay! >= 0 ? "+" : "−"}{Math.abs(currentDelay!)} min delay</strong> : <strong className="live-event__delay">{event.title}</strong>}{numericEvent && <span className="live-event__change">{changeLabel}</span>}</div>
+          <p className="live-event__message">{numericEvent && event.message.startsWith("Delay ") ? event.title : event.message}</p>
+        </div>
+        {event.source === "motis" && <div className="live-event__badges"><Badge variant={eventVariant(event)}>MOTIS</Badge></div>}
       </article>})}</div>}
     </section>;
 }
 
-export function RaceChartView({ entries, selectedTrainId, final = false }: RaceChartViewProps) {
+export function RaceChartView({ entries, currentParticipantId, final = false }: RaceChartViewProps) {
+  const myTrainId = entries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId))?.trainId ?? null;
   const sorted = [...entries].sort((left, right) => {
     const leftDelay = final ? left.finalDelayMinutes : left.raceDelayMinutes;
     const rightDelay = final ? right.finalDelayMinutes : right.raceDelayMinutes;
@@ -167,7 +176,7 @@ export function RaceChartView({ entries, selectedTrainId, final = false }: RaceC
         const delay = final ? entry.finalDelayMinutes : entry.raceDelayMinutes;
         const positiveDelay = Math.max(0, delay ?? 0);
         const width = axisMax ? (positiveDelay / axisMax) * 100 : 0;
-        const mine = entry.trainId === selectedTrainId;
+        const mine = entry.trainId === myTrainId;
         return <div className={`race-chart__row ${mine ? "mine" : ""}`.trim()} key={entry.trainId}>
           <div className="race-chart__label"><span>{entry.displayName}</span>{mine && <Badge variant="blue">My train</Badge>}</div>
           <div className="race-chart__bar-area"><span className="race-chart__bar" style={{ width: `${width}%` }} /><span className="race-chart__value">{delay === null || delay === undefined ? "—" : `${delay >= 0 ? "+" : "−"}${Math.abs(delay)} min`}</span></div>
@@ -421,7 +430,9 @@ export function TrainMapView({ journeys, selectedTrainId, selectionVersion, live
       const markerIndex = Math.min(points.length - 1, Math.floor(progress * (points.length - 1)));
       const markerPoint = points[markerIndex];
       const markerDirection = directionAngle(points, markerIndex);
-      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker" aria-label="${finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+      const safeDisplayName = journey.displayName.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+      const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` (${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)})`;
+      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}</span><span class="train-map__marker" aria-label="${finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
       return <Fragment key={journey.id}>
         <Polyline positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine ? 6 : 3, opacity: selected || isMine ? 1 : 0.85 }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>

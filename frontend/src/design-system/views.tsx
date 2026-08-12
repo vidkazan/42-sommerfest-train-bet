@@ -71,8 +71,7 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       <form className="bet-form bet-selection__actions" onSubmit={async (event) => { event.preventDefault(); if (await onCheckUsername()) setConfirmationOpen(true); }}>
-        <label className="field-label" htmlFor="username">Username</label>
-        <input id="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
+        <input id="username" aria-label="Username" value={username} onChange={(event) => onUsernameChange(event.target.value)} minLength={2} maxLength={24} placeholder="Your name" required autoComplete="nickname" />
         {usernameCheckError && <p className="error" role="alert">{usernameCheckError}</p>}
         <BadgeButton type="submit" className="bet-confirm-button ds-text-huge" disabled={usernameCheckLoading || !selectedTrainId}>{usernameCheckLoading ? "Checking…" : selectedTrainId ? `Bet on ${journeys.find((journey) => journey.id === selectedTrainId)?.displayName ?? "train"}` : "Select a train"}</BadgeButton>
       </form>

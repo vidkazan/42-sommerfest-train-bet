@@ -331,6 +331,7 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/remove", async (reque
         SELECT id FROM participants WHERE game_id = ?
       )`).run(game.id, game.id);
     db.prepare("DELETE FROM participants WHERE game_id = ?").run(game.id);
+    db.prepare("DELETE FROM journey_delay_snapshots WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_events WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM games WHERE id = ?").run(game.id);
@@ -690,7 +691,7 @@ const refreshGameProgress = async (game: GameRow) => {
     j.live_status AS previousStatus, j.current_delay_minutes AS previousCurrentDelay,
     j.race_delay_minutes AS previousRaceDelay, j.final_delay_minutes AS previousFinalDelay, j.delay_gain_band AS previousGainBand
     FROM game_journeys j
-    WHERE j.game_id = ? AND j.included = 1`)
+    WHERE j.game_id = ? AND j.included = 1 AND j.live_status NOT IN ('arrived', 'cancelled')`)
     .all(game.id) as Array<{ id: string; tripId: string; displayName: string; scheduledArrival: string; scheduledDeparture: string; previousStatus: string; previousCurrentDelay: number | null; previousRaceDelay: number | null; previousFinalDelay: number | null; previousGainBand: string }>;
   const previousRanks = db.prepare(`SELECT id, RANK() OVER (ORDER BY race_delay_minutes DESC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; position: number }>;
   const previousLeader = previousRanks.find((rank) => rank.position === 1);

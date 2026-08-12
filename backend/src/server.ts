@@ -96,6 +96,7 @@ db.exec(`
     departure_delay_minutes INTEGER,
     race_delay_minutes INTEGER,
     final_delay_minutes INTEGER,
+    delay_gain_band TEXT NOT NULL DEFAULT 'none',
     live_status TEXT NOT NULL DEFAULT 'waiting',
     last_live_update TEXT,
     live_error TEXT,
@@ -126,6 +127,7 @@ const columns = (table: string) => new Set(
   (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name),
 );
 if (!columns("game_events").has("dedupe_key")) db.exec("ALTER TABLE game_events ADD COLUMN dedupe_key TEXT");
+if (!columns("game_journeys").has("delay_gain_band")) db.exec("ALTER TABLE game_journeys ADD COLUMN delay_gain_band TEXT NOT NULL DEFAULT 'none'");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_game_events_dedupe_key ON game_events(game_id, dedupe_key) WHERE dedupe_key IS NOT NULL");
 
 const addLiveEvent = (gameId: string, type: string, payload: Record<string, unknown>, dedupeKey: string, createdAt: string) => {
@@ -686,17 +688,17 @@ const refreshGameProgress = async (game: GameRow) => {
   const rows = db.prepare(`SELECT DISTINCT j.id, j.external_trip_id AS tripId, j.display_name AS displayName,
     j.scheduled_arrival AS scheduledArrival, j.scheduled_departure AS scheduledDeparture,
     j.live_status AS previousStatus, j.current_delay_minutes AS previousCurrentDelay,
-    j.race_delay_minutes AS previousRaceDelay, j.final_delay_minutes AS previousFinalDelay
+    j.race_delay_minutes AS previousRaceDelay, j.final_delay_minutes AS previousFinalDelay, j.delay_gain_band AS previousGainBand
     FROM game_journeys j
     WHERE j.game_id = ? AND j.included = 1`)
-    .all(game.id) as Array<{ id: string; tripId: string; displayName: string; scheduledArrival: string; scheduledDeparture: string; previousStatus: string; previousCurrentDelay: number | null; previousRaceDelay: number | null; previousFinalDelay: number | null }>;
+    .all(game.id) as Array<{ id: string; tripId: string; displayName: string; scheduledArrival: string; scheduledDeparture: string; previousStatus: string; previousCurrentDelay: number | null; previousRaceDelay: number | null; previousFinalDelay: number | null; previousGainBand: string }>;
   const previousRanks = db.prepare(`SELECT id, ROW_NUMBER() OVER (ORDER BY race_delay_minutes DESC, id ASC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND live_status <> 'cancelled' AND race_delay_minutes IS NOT NULL`).all(game.id) as Array<{ id: string; position: number }>;
   const previousLeader = previousRanks.find((rank) => rank.position === 1);
   const results = await Promise.allSettled(rows.map((row) => transitDataSource.getLiveTrip(row.tripId)));
   const fetchedAt = new Date().toISOString();
   const updates = rows.map((row, index) => {
     const result = results[index];
-    if (result.status === "rejected") return { ...row, actualArrival: null, actualDeparture: null, currentDelayMinutes: null, departureDelayMinutes: null, raceDelayMinutes: null, finalDelayMinutes: null, geometry: null, endpoints: null, alerts: [], status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
+    if (result.status === "rejected") return { ...row, actualArrival: null, actualDeparture: null, currentDelayMinutes: null, departureDelayMinutes: null, raceDelayMinutes: null, finalDelayMinutes: null, geometry: null, endpoints: null, alerts: [], delayGainBand: row.previousGainBand, status: "stale", error: result.reason instanceof Error ? result.reason.message : "MOTIS request failed" };
     const actualTimestamp = result.value.actualArrival ? Date.parse(result.value.actualArrival) : NaN;
     const scheduledTimestamp = Date.parse(row.scheduledArrival);
     const finalDelayMinutes = Number.isFinite(actualTimestamp) && Number.isFinite(scheduledTimestamp)
@@ -707,16 +709,23 @@ const refreshGameProgress = async (game: GameRow) => {
       ? Math.round((actualDepartureTimestamp - scheduledDepartureTimestamp) / 60000) : null);
     const currentDelayMinutes = result.value.currentDelayMinutes ?? finalDelayMinutes;
     const raceDelayMinutes = currentDelayMinutes !== null && departureDelayMinutes !== null ? currentDelayMinutes - departureDelayMinutes : null;
+    const delayGainBand = row.previousGainBand;
     const departureHasPassed = Number.isFinite(Date.parse(row.scheduledDeparture)) && Date.parse(row.scheduledDeparture) <= Date.now();
-    return { ...row, actualArrival: result.value.actualArrival, actualDeparture: result.value.actualDeparture ?? null, currentDelayMinutes, departureDelayMinutes, raceDelayMinutes, finalDelayMinutes, geometry: result.value.geometry, endpoints: result.value.endpoints, alerts: result.value.alerts,
+    return { ...row, actualArrival: result.value.actualArrival, actualDeparture: result.value.actualDeparture ?? null, currentDelayMinutes, departureDelayMinutes, raceDelayMinutes, finalDelayMinutes, geometry: result.value.geometry, endpoints: result.value.endpoints, alerts: result.value.alerts, delayGainBand,
       status: result.value.cancelled ? "cancelled" : result.value.arrived ? "arrived" : departureHasPassed ? "in_progress" : "waiting_for_departure", error: null };
   });
   db.transaction(() => {
-    const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, actual_departure = ?, current_delay_minutes = ?, departure_delay_minutes = ?, race_delay_minutes = ?, final_delay_minutes = ?,
+    const update = db.prepare(`UPDATE game_journeys SET actual_arrival = ?, actual_departure = ?, current_delay_minutes = ?, departure_delay_minutes = ?, race_delay_minutes = ?, final_delay_minutes = ?, delay_gain_band = ?,
       live_status = ?, last_live_update = ?, live_error = ?, geometry = COALESCE(?, geometry),
       route_json = COALESCE(?, route_json) WHERE id = ? AND game_id = ?`);
     for (const updateRow of updates) {
-      update.run(updateRow.actualArrival, updateRow.actualDeparture, updateRow.currentDelayMinutes, updateRow.departureDelayMinutes, updateRow.raceDelayMinutes, updateRow.finalDelayMinutes, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
+      const currentGain = updateRow.currentDelayMinutes !== null ? (() => {
+        const snapshot = db.prepare(`SELECT delay_minutes AS delayMinutes FROM journey_delay_snapshots WHERE game_id = ? AND journey_id = ? AND recorded_at <= ? ORDER BY recorded_at DESC LIMIT 1`).get(game.id, updateRow.id, new Date(Date.parse(fetchedAt) - 10 * 60_000).toISOString()) as { delayMinutes: number } | undefined;
+        const gain = snapshot ? updateRow.currentDelayMinutes! - snapshot.delayMinutes : null;
+        return gain !== null && gain >= 3 ? "drastic" : gain !== null && gain >= 2 ? "moderate" : "none";
+      })() : updateRow.delayGainBand;
+      updateRow.delayGainBand = currentGain;
+      update.run(updateRow.actualArrival, updateRow.actualDeparture, updateRow.currentDelayMinutes, updateRow.departureDelayMinutes, updateRow.raceDelayMinutes, updateRow.finalDelayMinutes, currentGain, updateRow.status, fetchedAt, updateRow.error, updateRow.geometry, updateRow.endpoints, updateRow.id, game.id);
       const base = { trainId: updateRow.id, displayName: updateRow.displayName, source: "generated" };
       if (updateRow.status === "in_progress" && updateRow.previousStatus === "waiting_for_departure") addLiveEvent(game.id, "train_departed", { ...base, title: eventPhrase("departed", updateRow.displayName, updateRow.id), message: "The delay race is officially underway.", severity: "info" }, `${updateRow.id}:train_departed`, fetchedAt);
       if (updateRow.status === "cancelled" && updateRow.previousStatus !== "cancelled") addLiveEvent(game.id, "train_cancelled", { ...base, title: eventPhrase("cancelled", updateRow.displayName, updateRow.id), message: "Cancelled trains do not score delay points.", severity: "severe" }, `${updateRow.id}:train_cancelled`, fetchedAt);
@@ -726,8 +735,8 @@ const refreshGameProgress = async (game: GameRow) => {
         const gain = snapshot ? updateRow.currentDelayMinutes - snapshot.delayMinutes : null;
         const baselineDelay = snapshot?.delayMinutes;
         const bucket = Math.floor(Date.parse(fetchedAt) / 600_000);
-        if (gain !== null && baselineDelay !== undefined && gain >= 3) addLiveEvent(game.id, "delay_gain_drastic", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayDrastic", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay ${formatCompactDelay(updateRow.currentDelayMinutes)} (+${gain}min)`, severity: "warning" }, `${updateRow.id}:delay-drastic:${bucket}`, fetchedAt);
-        else if (gain !== null && baselineDelay !== undefined && gain >= 2) addLiveEvent(game.id, "delay_gain_moderate", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayModerate", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay ${formatCompactDelay(updateRow.currentDelayMinutes)} (+${gain}min)`, severity: "info" }, `${updateRow.id}:delay-moderate:${bucket}`, fetchedAt);
+        if (gain !== null && baselineDelay !== undefined && gain >= 3 && updateRow.previousGainBand !== "drastic") addLiveEvent(game.id, "delay_gain_drastic", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayDrastic", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay ${formatCompactDelay(updateRow.currentDelayMinutes)} (+${gain}min)`, severity: "warning" }, `${updateRow.id}:delay-drastic:${bucket}`, fetchedAt);
+        else if (gain !== null && baselineDelay !== undefined && gain >= 2 && updateRow.previousGainBand === "none") addLiveEvent(game.id, "delay_gain_moderate", { ...base, previousDelayMinutes: baselineDelay, currentDelayMinutes: updateRow.currentDelayMinutes, changeMinutes: gain, title: eventPhrase("delayModerate", updateRow.displayName, `${updateRow.id}:${bucket}`), message: `Delay ${formatCompactDelay(updateRow.currentDelayMinutes)} (+${gain}min)`, severity: "info" }, `${updateRow.id}:delay-moderate:${bucket}`, fetchedAt);
         if (updateRow.currentDelayMinutes === 0 && updateRow.previousCurrentDelay !== null && updateRow.previousCurrentDelay !== 0) addLiveEvent(game.id, "on_time", { ...base, previousDelayMinutes: updateRow.previousCurrentDelay, currentDelayMinutes: 0, changeMinutes: -updateRow.previousCurrentDelay, title: eventPhrase("onTime", updateRow.displayName, updateRow.id), message: `Delay 0min (${formatCompactDelay(-updateRow.previousCurrentDelay)})`, severity: "info" }, `${updateRow.id}:on-time:${bucket}`, fetchedAt);
         db.prepare("INSERT INTO journey_delay_snapshots (game_id, journey_id, delay_minutes, recorded_at) VALUES (?, ?, ?, ?)").run(game.id, updateRow.id, updateRow.currentDelayMinutes, fetchedAt);
       }
@@ -859,23 +868,23 @@ app.get<{ Querystring: { gameId?: string } }>("/api/results", async (request, re
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
   const trains = db.prepare(`SELECT DISTINCT j.id, j.display_name AS displayName,
       j.scheduled_arrival AS scheduledArrival, j.actual_arrival AS actualArrival,
-      j.delay_seconds AS delaySeconds, j.live_status AS status FROM game_journeys j
+      j.final_delay_minutes AS finalDelayMinutes, j.live_status AS status FROM game_journeys j
       JOIN bets b ON b.train_id = j.id
       WHERE j.game_id = ? AND b.game_id = ? AND j.included = 1`)
-    .all(game.id, game.id) as Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; delaySeconds: number | null; status: string }>;
+    .all(game.id, game.id) as Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; finalDelayMinutes: number | null; status: string }>;
   const updates = trains.map((train) => ({ ...train, cancelled: train.status === "cancelled", stale: train.status === "stale" }));
   if (updates.length === 0) return { status: "pending", final: false, winners: [], trains: updates };
   const final = updates.every((train) => train.status === "arrived" || train.status === "cancelled");
   if (!final) return { status: "pending", final: false, winners: [], trains: updates };
-  const scored = updates.filter((train) => train.status === "arrived" && train.delaySeconds !== null);
+  const scored = updates.filter((train) => train.status === "arrived" && train.finalDelayMinutes !== null);
   if (scored.length === 0) return { status: "no_winner", final: true, winners: [], trains: updates };
-  const maxDelay = Math.max(...scored.map((train) => train.delaySeconds as number));
+  const maxDelayMinutes = Math.max(...scored.map((train) => train.finalDelayMinutes as number));
   const winners = db.prepare(`SELECT p.id AS participantId, p.username, b.train_id AS trainId FROM bets b
     JOIN participants p ON p.id = b.participant_id WHERE b.game_id = ?`).all(game.id) as Array<{ username: string; trainId: string }>;
   return {
     status: "finished", final: true,
-    winners: winners.filter((winner) => scored.some((train) => train.id === winner.trainId && train.delaySeconds === maxDelay))
-      .map((winner) => ({ ...winner, delaySeconds: maxDelay })),
+    winners: winners.filter((winner) => scored.some((train) => train.id === winner.trainId && train.finalDelayMinutes === maxDelayMinutes))
+      .map((winner) => ({ ...winner, delaySeconds: maxDelayMinutes * 60 })),
     trains: updates,
   };
 });

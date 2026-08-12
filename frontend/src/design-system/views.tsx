@@ -144,12 +144,12 @@ export function LiveEventsView({ myTrainId, events, onSelectTrain }: LiveEventsV
         const numericEvent = event.currentDelayMinutes !== undefined && event.currentDelayMinutes !== null;
         const currentDelay = numericEvent ? event.currentDelayMinutes : null;
         const change = event.changeMinutes ?? null;
-        const changeLabel = change === null ? "—" : `${change > 0 ? "↑ " : change < 0 ? "↓ " : "— "}${Math.abs(change)} min`;
+        const changeLabel = change === null ? "—" : `${change > 0 ? "↑ " : change < 0 ? "↓ " : "— "}${Math.abs(change)}`;
         const title = (event.displayName ?? event.title).split(" ")[0];
         return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>
         <div className="live-event__body">
           <div className="live-event__top"><strong>{title}</strong><time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My train</Badge>}</div>
-          <div className="live-event__numbers">{numericEvent ? <strong className={`live-event__delay live-event__delay--${event.severity}`}>{currentDelay! >= 0 ? "+" : "−"}{Math.abs(currentDelay!)} min delay</strong> : <strong className="live-event__delay">{event.title}</strong>}{numericEvent && <span className="live-event__change">{changeLabel}</span>}</div>
+          <div className="live-event__numbers">{numericEvent ? <strong className={`live-event__delay live-event__delay--${currentDelay! > 0 ? "late" : currentDelay! < 0 ? "early" : "on-time"}`}>{currentDelay! >= 0 ? "+" : "−"}{Math.abs(currentDelay!)} min</strong> : <strong className="live-event__delay">{event.title}</strong>}{numericEvent && <Badge variant="green" className="live-event__change">{changeLabel}</Badge>}</div>
           <p className="live-event__message">{numericEvent && event.message.startsWith("Delay ") ? event.title : event.message}</p>
         </div>
         {event.source === "motis" && <div className="live-event__badges"><Badge variant={eventVariant(event)}>MOTIS</Badge></div>}

@@ -24,7 +24,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .train-map__marker[aria-label="Train finished"] .train-map__marker-arrow { font-size: 15px; transform: none; }
 .public-shell > .ds-card { display: flex; flex-direction: column; height: clamp(320px, 58vh, 640px); min-height: 0; overflow: hidden; }
 .public-shell > .ds-card > .view-tabs { flex-shrink: 0; }
-.public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > section[aria-label="Final results"] { flex: 1; min-height: 0; overflow-y: auto; }
+.public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > .live-events-view, .public-shell > .ds-card > section[aria-label="Final results"] { flex: 1; min-height: 0; overflow-y: auto; }
 .train-map .leaflet-tile-pane { filter: grayscale(1) brightness(.7) contrast(1.05); }
 .train-marker { font-size: 3rem; }
 .ds-icon { display: block; flex: 0 0 24px; height: 24px; width: 24px; }
@@ -37,6 +37,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .progress-meta { align-items: center; display: flex; gap: var(--ds-space-3); justify-content: space-between; margin-bottom: var(--ds-space-4); }
 .progress-meta .ds-notice { margin: 0; }
 .live-events { background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); display: flex; flex-direction: column; min-height: 0; padding: var(--ds-space-3); }
+.live-events-view { overflow-y: auto; }
 .live-events__heading { align-items: center; display: flex; justify-content: space-between; }
 .live-events h2 { font-size: var(--ds-font-large); margin: 0 0 var(--ds-space-2); }
 .live-events__status { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
@@ -137,7 +138,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .ds-journey-card > .ds-badge { justify-self: start; width: max-content; }
 .ds-journey-card { background: color-mix(in srgb, var(--ds-surface-muted) 50%, var(--ds-surface) 50%); border: 0; }
 .ds-journey-card--public { align-self: stretch; height: 100%; min-height: 150px; }
-.ds-journey-cell.selected { border: 2px solid var(--ds-focus-ring); box-shadow: var(--ds-shadow); }
+.ds-journey-cell.selected { border: 1px solid var(--ds-focus-ring); box-shadow: var(--ds-shadow); }
 .ds-journey-cell > strong, .ds-journey-leg > strong { font-size: 1.0625rem; font-weight: 600; line-height: 1.25; }
 .ds-journey-header__duration { font-size: .75rem; font-weight: 600; line-height: 1.25; }
 .ds-journey-header .ds-time-label__main { font-size: 1.0625rem; font-weight: 600; line-height: 1.25; }
@@ -182,7 +183,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
   .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
   .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }
-  .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view { overflow: visible; }
+  .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > .live-events-view { overflow: visible; }
   .public-shell > .ds-card > .progress-view { grid-template-rows: minmax(310px, auto) minmax(220px, auto); }
   .public-shell .bet-name-form { min-height: 0; }
   .public-shell .bet-selection { flex: none; }

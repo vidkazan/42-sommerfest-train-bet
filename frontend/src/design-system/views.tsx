@@ -7,7 +7,7 @@ import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./co
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 
-export type PublicView = "browse" | "progress" | "leaderboard";
+export type PublicView = "browse" | "progress" | "leaderboard" | "events";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
 export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
@@ -18,7 +18,8 @@ export type LiveLeaderboardEntry = {
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; selectionVersion: number; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
-export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; events: LiveEvent[] };
+export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
+export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
@@ -117,7 +118,7 @@ function formatPlace(position: number) {
   return `${position}${suffix} place`;
 }
 
-export function LiveLeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, events }: LiveLeaderboardViewProps) {
+export function LiveLeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LiveLeaderboardViewProps) {
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
   const myTrainId = entries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId))?.trainId;
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
@@ -129,7 +130,11 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
         return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
       })}</div>}
     </section>
-    <section className="live-events" aria-label="Live events">
+  </section>;
+}
+
+export function LiveEventsView({ myTrainId, events, onSelectTrain }: LiveEventsViewProps) {
+  return <section className="live-events live-events-view" aria-label="Live events">
       <div className="live-events__heading"><h2>Live events</h2></div>
       {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => {
         const selectable = Boolean(event.trainId);
@@ -139,8 +144,7 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
         <div><strong>{event.title}</strong><p>{event.message}</p></div>
         <time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>
       </article>})}</div>}
-    </section>
-  </section>;
+    </section>;
 }
 
 export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, final = false, finalStatus, myUsername, myBetPlace, myBetWon }: LeaderboardViewProps) {

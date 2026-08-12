@@ -1,8 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
+import { Drawer } from "vaul";
 import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveLeaderboardView, Notice, ResultsView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveLeaderboardView, Notice, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
@@ -14,6 +15,7 @@ function App() {
   const publicGameId = gamePathMatch?.[1] ?? null;
   const mode: AppMode = window.location.pathname === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
   const [publicView, setPublicView] = useState<PublicView>("browse");
+  const [activePublicSnapPoint, setActivePublicSnapPoint] = useState<number | string | null>("78%");
   const [adminView, setAdminView] = useState<AdminView>("access");
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [adminInput, setAdminInput] = useState("");
@@ -71,6 +73,7 @@ function App() {
     setSelectedTrainId(trainId);
     setSelectionVersion((version) => version + 1);
   };
+
 
   useEffect(() => {
     if (mode !== "public") return;
@@ -338,21 +341,38 @@ function App() {
           ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} selectionVersion={selectionVersion} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
-      <Card>
+      <Drawer.Root
+        open
+        modal={false}
+        dismissible={false}
+        snapPoints={["42%", "78%", "94%"]}
+        activeSnapPoint={activePublicSnapPoint}
+        setActiveSnapPoint={setActivePublicSnapPoint}
+        noBodyStyles
+        repositionInputs={false}
+      >
+        <Drawer.Content className="public-panel-drawer" aria-label="Game panel">
+          <Drawer.Handle className="public-panel-drawer__handle" />
+          <Card>
         <nav className="view-tabs" aria-label="Game views">
           {!betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
-          {results?.final && results.status !== "pending" && <BadgeButton type="button" className={publicView === "result" ? "active" : ""} onClick={() => setPublicView("result")}>Results</BadgeButton>}
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} events={liveEvents} />}
-        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
-        {publicView === "result" && !loading && !error && (() => {
-          const myTrain = journeys.find((journey) => journey.id === selectedTrainId);
-          const myBetPlace = leaderboard.find((entry) => entry.trainId === selectedTrainId)?.position ?? null;
-          const myBetWon = Boolean(results?.winners.some((winner) => winner.trainId === selectedTrainId));
-          return <ResultsView status={results?.status ?? "pending"} final={results?.final ?? false} winners={results?.winners ?? []} myUsername={username} myTrainName={myTrain?.displayName ?? null} myTrainDelayMinutes={myTrain?.finalDelayMinutes ?? null} myBetPlace={myBetPlace} myBetWon={myBetWon} />;
-        })()}
+        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView
+          entries={leaderboard}
+          currentParticipantId={storedUserId}
+          selectedTrainId={selectedTrainId}
+          onSelectTrain={selectTrain}
+          lastUpdatedAt={leaderboardUpdatedAt}
+          stale={leaderboardStale}
+          final={Boolean(results?.final && results.status !== "pending")}
+          finalStatus={results?.status}
+          myUsername={username}
+          myBetPlace={leaderboard.find((entry) => entry.trainId === selectedTrainId)?.position ?? null}
+          myBetWon={Boolean(results?.winners.some((winner) => winner.trainId === selectedTrainId))}
+        />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}
@@ -362,7 +382,9 @@ function App() {
             <BetView journeys={journeys} selectedTrainId={selectedTrainId} username={username} betSubmitted={betSubmitted} loading={betLoading} error={betError} usernameCheckLoading={usernameCheckLoading} usernameCheckError={usernameCheckError} onSelectTrain={selectTrain} onUsernameChange={(value) => { setUsername(value); setUsernameCheckError(null); }} onCheckUsername={checkUsername} onSubmit={submitBet} />
           </>
         )}
-      </Card>
+          </Card>
+        </Drawer.Content>
+      </Drawer.Root>
     </main>
   );
 }

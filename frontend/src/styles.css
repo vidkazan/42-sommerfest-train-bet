@@ -22,9 +22,11 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .train-map__marker { align-items: center; background: var(--train-marker-color); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); display: flex; height: 24px; justify-content: center; width: 24px; }
 .train-map__marker-arrow { color: #fff; display: block; font-size: 14px; font-weight: 700; line-height: 1; transform: rotate(calc(var(--train-marker-angle) - 90deg)); transform-origin: center; }
 .train-map__marker[aria-label="Train finished"] .train-map__marker-arrow { font-size: 15px; transform: none; }
-.public-shell > .ds-card { display: flex; flex-direction: column; height: clamp(320px, 58vh, 640px); min-height: 0; overflow: hidden; }
-.public-shell > .ds-card > .view-tabs { flex-shrink: 0; }
-.public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > section[aria-label="Final results"] { flex: 1; min-height: 0; overflow-y: auto; }
+.public-panel-drawer { position: static !important; }
+.public-panel-drawer__handle { display: none; }
+.public-panel-drawer > .ds-card { display: flex; flex-direction: column; height: clamp(320px, 58vh, 640px); min-height: 0; overflow: hidden; }
+.public-panel-drawer > .ds-card > .view-tabs { flex-shrink: 0; }
+.public-panel-drawer > .ds-card > .progress-view, .public-panel-drawer > .ds-card > .leaderboard-view, .public-panel-drawer > .ds-card > section[aria-label="Final results"] { flex: 1; min-height: 0; overflow-y: auto; }
 .train-map .leaflet-tile-pane { filter: grayscale(1) brightness(.7) contrast(1.05); }
 .train-marker { font-size: 3rem; }
 .ds-icon { display: block; flex: 0 0 24px; height: 24px; width: 24px; }
@@ -173,11 +175,14 @@ button:disabled { cursor: wait; opacity: .6; }
 @media (max-width: 799px) {
   .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
   .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
-  .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }
-  .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view { overflow: visible; }
-  .public-shell > .ds-card > .progress-view { grid-template-rows: minmax(260px, auto) minmax(220px, auto); }
+  .public-panel-drawer { background: var(--ds-surface-muted); border-radius: var(--ds-radius-lg) var(--ds-radius-lg) 0 0; bottom: 0; box-shadow: var(--ds-shadow); left: 0; max-height: 94vh; position: fixed !important; right: 0; top: auto; z-index: 20; }
+  .public-panel-drawer__handle { background: var(--ds-border); border-radius: var(--ds-radius-pill); display: block; height: 0.3rem; margin: 0.55rem auto 0; width: 3rem; }
+  .public-panel-drawer > .ds-card { border: 0; border-radius: inherit; box-shadow: none; display: block; height: auto; max-height: calc(94vh - 1.4rem); min-height: 0; overflow: hidden auto; }
+  .public-panel-drawer > .ds-card > .progress-view, .public-panel-drawer > .ds-card > .leaderboard-view { overflow: visible; }
+  .public-panel-drawer > .ds-card > .progress-view { grid-template-rows: minmax(260px, auto) minmax(220px, auto); }
   .public-shell .bet-name-form { min-height: 0; }
   .public-shell .bet-selection { flex: none; }
   .public-shell .bet-selection__list { overflow: visible; }
 }
 @media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }
+@media (min-width: 800px) { .public-panel-drawer { transform: none !important; } }

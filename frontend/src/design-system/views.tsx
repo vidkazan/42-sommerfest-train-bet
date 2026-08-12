@@ -7,7 +7,7 @@ import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./co
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 
-export type PublicView = "browse" | "progress" | "leaderboard" | "result";
+export type PublicView = "browse" | "progress" | "leaderboard";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
 export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
@@ -19,7 +19,7 @@ export type GameHeaderViewProps = { eyebrow?: string; title: string; description
 export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; selectionVersion: number; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; events: LiveEvent[] };
-export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
+export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void };
@@ -144,15 +144,27 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
   </section>;
 }
 
-export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LeaderboardViewProps) {
-  const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
+export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, final = false, finalStatus, myUsername, myBetPlace, myBetWon }: LeaderboardViewProps) {
+  const finalEntries = final ? [...entries].sort((left, right) => {
+    const leftValid = !left.cancelled && left.finalDelayMinutes !== null;
+    const rightValid = !right.cancelled && right.finalDelayMinutes !== null;
+    if (leftValid !== rightValid) return Number(rightValid) - Number(leftValid);
+    return (right.finalDelayMinutes ?? -Infinity) - (left.finalDelayMinutes ?? -Infinity);
+  }).map((entry, index, sorted) => ({ ...entry, position: !entry.cancelled && entry.finalDelayMinutes !== null ? (index === 0 || entry.finalDelayMinutes !== sorted[index - 1].finalDelayMinutes ? index + 1 : sorted[index - 1].position) : null })) : entries;
+  const prioritizedEntries = prioritizeCurrentBet(finalEntries, currentParticipantId);
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
   return <section className="leaderboard-view" aria-label="Leaderboard">
-    <h2>Who’s betting on each train?</h2>
+    <h2>{final ? "Final standings" : "Who’s betting on each train?"}</h2>
+    {final && finalStatus === "finished" && myUsername && <div className="results-my-bet">
+      <Badge variant="blue">{myUsername}</Badge>
+      <strong className="results-my-bet__status">{myBetPlace ? `${myBetWon ? "You got" : "You did not win — you got"} ${formatPlace(myBetPlace)}` : "You did not win"}</strong>
+    </div>}
+    {final && finalStatus === "no_winner" && <Notice>No winner — every selected train was cancelled.</Notice>}
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const rankVariant = entry.position === 1 ? "red" : entry.position === 2 ? "orange" : entry.position === 3 ? "yellow" : "secondary";
-      const delay = entry.raceDelayMinutes !== null && entry.raceDelayMinutes !== undefined ? `${entry.raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(entry.raceDelayMinutes)} min` : null;
+      const delayMinutes = final ? entry.finalDelayMinutes : entry.raceDelayMinutes;
+      const delay = delayMinutes !== null && delayMinutes !== undefined ? `${delayMinutes >= 0 ? "+" : "−"}${Math.abs(delayMinutes)} min` : null;
       const raceState = getRaceState(entry);
       const selected = entry.trainId === selectedTrainId;
       return <article className={`leaderboard-row ${selected ? "selected" : ""}`} key={entry.trainId} role="button" tabIndex={0} onClick={() => onSelectTrain(entry.trainId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTrain(entry.trainId); } }}>

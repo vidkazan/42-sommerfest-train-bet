@@ -133,9 +133,11 @@ export function LiveLeaderboardView({ entries, currentParticipantId, selectedTra
 }
 
 export function LiveEventsView({ myTrainId, events, onSelectTrain }: LiveEventsViewProps) {
-  return <section className="live-events live-events-view" aria-label="Live events">
-      <div className="live-events__heading"><h2>Live events</h2></div>
-      {!events.length ? <p className="live-events__empty">No drama yet. The trains are behaving.</p> : <div className="live-events__list">{events.map((event) => {
+  const [onlyMyTrain, setOnlyMyTrain] = useState(false);
+  const visibleEvents = onlyMyTrain ? events.filter((event) => event.trainId === myTrainId) : events;
+  return <section className="live-events live-events-view" aria-label="Events">
+      <div className="live-events__heading"><h2>Events</h2><label className="live-events__filter"><input type="checkbox" checked={onlyMyTrain} onChange={(event) => setOnlyMyTrain(event.target.checked)} disabled={!myTrainId} /> Only my train</label></div>
+      {!visibleEvents.length ? <p className="live-events__empty">{onlyMyTrain ? "No events for your train yet." : "No drama yet. The trains are behaving."}</p> : <div className="live-events__list">{visibleEvents.map((event) => {
         const selectable = Boolean(event.trainId);
         const selectEventTrain = () => { if (event.trainId) onSelectTrain(event.trainId); };
         return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>

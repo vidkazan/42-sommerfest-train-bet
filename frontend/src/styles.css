@@ -40,6 +40,8 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .live-events-view { overflow-y: auto; }
 .live-events__heading { align-items: center; display: flex; justify-content: space-between; }
 .live-events h2 { font-size: var(--ds-font-large); margin: 0 0 var(--ds-space-2); }
+.live-events__filter { align-items: center; color: var(--ds-text-muted); display: inline-flex; font-size: var(--ds-font-small); gap: var(--ds-space-1); }
+.live-events__filter input { accent-color: var(--ds-accent-blue); margin: 0; width: auto; }
 .live-events__status { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
 .live-events__list { display: grid; gap: var(--ds-space-2); min-height: 0; overflow-y: auto; }
 .live-event { align-items: start; background: color-mix(in srgb, var(--ds-surface-muted) 45%, var(--ds-surface) 55%); border-radius: var(--ds-radius-md); display: grid; gap: var(--ds-space-2); grid-template-columns: auto 1fr auto; padding: var(--ds-space-3); }
@@ -181,6 +183,8 @@ button:disabled { cursor: wait; opacity: .6; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 @media (max-width: 560px) { .inline-form { flex-direction: column; } .inline-form button { width: 100%; } }
 @media (max-width: 799px) {
+  .app-shell { gap: var(--ds-space-3); padding: var(--ds-space-2); }
+  .public-shell > .ds-card { padding: var(--ds-space-3); }
   .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
   .public-shell .train-map { height: clamp(220px, 34vh, 360px); }
   .public-shell > .ds-card { display: block; height: auto; min-height: 0; overflow: visible; }

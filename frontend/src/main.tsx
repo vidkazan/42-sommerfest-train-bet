@@ -344,7 +344,7 @@ function App() {
           {!betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
           {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
-          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Live events</BadgeButton>}
+          {betSubmitted && <BadgeButton type="button" className={`ds-text-huge ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={leaderboard} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView

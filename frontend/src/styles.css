@@ -24,6 +24,14 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .train-map__marker-icon { background: transparent; border: 0; }
 .train-map__marker-label { background: var(--train-marker-color); border: 1px solid rgb(255 255 255 / 75%); border-radius: var(--ds-radius-sm); color: #fff; display: block; font-size: .65rem; font-weight: 700; left: 50%; line-height: 1.1; padding: .15rem .3rem; position: absolute; top: 0; transform: translate(-50%, -100%); white-space: nowrap; }
 .train-map__marker { align-items: center; background: var(--train-marker-color); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); display: flex; height: 24px; justify-content: center; width: 24px; }
+.train-map__caption, .train-map__legend { background: var(--ds-map-control-surface); border: 1px solid var(--ds-border-control); border-radius: var(--ds-radius-sm); color: var(--ds-text-primary); font-size: .7rem; padding: .35rem .5rem; position: absolute; z-index: 1000; }
+.train-map__caption { left: .75rem; top: .75rem; }
+.train-map__legend { bottom: .75rem; display: flex; flex-wrap: wrap; gap: .45rem .65rem; right: .75rem; }
+.train-map__legend span { align-items: center; display: inline-flex; gap: .25rem; }
+.train-map__legend-swatch { background: var(--ds-map-route); border-radius: 999px; display: inline-block; height: .35rem; width: 1rem; }
+.train-map__legend-swatch--mine { background: #105182; }
+.train-map__legend-swatch--leader { background: #dd2222; }
+.train-map__legend-swatch--cancelled { background: repeating-linear-gradient(90deg, #737373 0 .35rem, transparent .35rem .6rem); }
 .train-map__marker-arrow { color: #fff; display: block; font-size: 14px; font-weight: 700; line-height: 1; transform: rotate(calc(var(--train-marker-angle) - 90deg)); transform-origin: center; }
 .train-map__marker[aria-label="Train finished"] .train-map__marker-arrow { font-size: 15px; transform: none; }
 .public-shell > .ds-card { display: flex; flex-direction: column; height: clamp(320px, 58vh, 640px); min-height: 0; overflow: hidden; }

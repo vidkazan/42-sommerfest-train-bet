@@ -14,6 +14,9 @@ export const config = {
   adminToken: required("GAME_ADMIN_TOKEN"),
   motisBaseUrl: optional("MOTIS_BASE_URL", "https://api.transitous.org"),
   intBahnBaseUrl: optional("INT_BAHN_BASE_URL", "https://int.bahn.de"),
+  historyServiceBaseUrl: optional("HISTORY_SERVICE_BASE_URL", "http://127.0.0.1:8000"),
+  historyServiceTimeoutMs: Number(optional("HISTORY_SERVICE_TIMEOUT_MS", "2000")),
+  historyServiceCacheTtlSeconds: Number(optional("HISTORY_SERVICE_CACHE_TTL_SECONDS", "300")),
   transitProvider: optional("TRANSIT_PROVIDER", "motis"),
   eventTimezone: optional("EVENT_TIMEZONE", "Europe/Berlin"),
   cacheTtlSeconds: Number(optional("CACHE_TTL_SECONDS", "60")),
@@ -35,4 +38,12 @@ if (!Number.isFinite(config.transitRequestDelayMs) || config.transitRequestDelay
 
 if (!Number.isInteger(config.transitMaxRetries) || config.transitMaxRetries < 0) {
   throw new Error("TRANSIT_MAX_RETRIES must be a non-negative integer");
+}
+
+if (!Number.isFinite(config.historyServiceTimeoutMs) || config.historyServiceTimeoutMs <= 0) {
+  throw new Error("HISTORY_SERVICE_TIMEOUT_MS must be greater than zero");
+}
+
+if (!Number.isFinite(config.historyServiceCacheTtlSeconds) || config.historyServiceCacheTtlSeconds <= 0) {
+  throw new Error("HISTORY_SERVICE_CACHE_TTL_SECONDS must be greater than zero");
 }

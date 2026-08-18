@@ -17,7 +17,7 @@ export type LiveLeaderboardEntry = {
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type BrandHeaderProps = { logoSrc: string };
-export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; selectionVersion: number; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
+export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; onSelectTrain: (trainId: string) => void };
@@ -357,17 +357,6 @@ function MapFitTrips({ points }: { points: Array<{ lat: number; lon: number }> }
   return null;
 }
 
-function MapFocusTrip({ points, focusVersion }: { points: Array<{ lat: number; lon: number }>; focusVersion: number }) {
-  const map = useMap();
-  const focusKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
-  useEffect(() => {
-    if (!points.length) return;
-    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
-  }, [map, focusKey, focusVersion]);
-  return null;
-}
-
 function decodePolyline(encoded: string): Array<{ lat: number; lon: number }> {
   const points: Array<{ lat: number; lon: number }> = [];
   let index = 0; let lat = 0; let lon = 0;
@@ -391,7 +380,7 @@ function directionAngle(points: Array<{ lat: number; lon: number }>, index: numb
   return Math.round((Math.atan2(target.lon - current.lon, target.lat - current.lat) * 180) / Math.PI);
 }
 
-export function TrainMapView({ journeys, selectedTrainId, selectionVersion, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
+export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
   const routes = journeys.map((journey) => {
     const live = liveEntries.find((train) => train.trainId === journey.id);
     const geometry = live?.geometry ?? journey.geometry;
@@ -401,18 +390,25 @@ export function TrainMapView({ journeys, selectedTrainId, selectionVersion, live
     let encoded: string[] = [];
     try { encoded = JSON.parse(geometry ?? "[]") as string[]; } catch { if (geometry) encoded = [geometry]; }
     const points = encoded.flatMap(decodePolyline);
-    if (points.length < 2) endpoints = endpoints.length >= 2 ? [endpoints[0], endpoints[endpoints.length - 1]] : points;
-    return { journey, points, endpoints };
+    const endpointPoints = endpoints.length >= 2
+      ? [endpoints[0], endpoints[endpoints.length - 1]]
+      : points.length >= 2 ? [points[0], points[points.length - 1]] : points;
+    return { journey, points, endpoints: endpointPoints };
   }).filter((route) => route.points.length > 0);
   const allPoints = routes.flatMap((route) => route.points);
-  const selectedPoints = routes.find((route) => route.journey.id === selectedTrainId)?.points ?? [];
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
 
   return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
     <MapResizeHandler />
     <MapFitTrips points={allPoints} />
-    <MapFocusTrip points={selectedPoints} focusVersion={selectionVersion} />
     <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <div className="train-map__caption">The train with the biggest delay gain wins.</div>
+    <div className="train-map__legend" aria-label="Map legend">
+      <span><i className="train-map__legend-swatch train-map__legend-swatch--route" />Route</span>
+      <span><i className="train-map__legend-swatch train-map__legend-swatch--mine" />Your train</span>
+      <span><i className="train-map__legend-swatch train-map__legend-swatch--leader" />Leading</span>
+      <span><i className="train-map__legend-swatch train-map__legend-swatch--cancelled" />Cancelled</span>
+    </div>
     {[...routes].sort((a, b) => {
       const aEntry = liveEntries.find((entry) => entry.trainId === a.journey.id);
       const bEntry = liveEntries.find((entry) => entry.trainId === b.journey.id);
@@ -424,28 +420,30 @@ export function TrainMapView({ journeys, selectedTrainId, selectionVersion, live
       const selected = journey.id === selectedTrainId;
       const live = liveEntries.find((train) => train.trainId === journey.id);
       const isMine = live?.bettors.some((bettor) => bettor.participantId === currentParticipantId) ?? false;
-      const rankColor = live?.position === 1 ? "#DD2222" : live?.position === 2 ? "#F97316" : live?.position === 3 ? "#DD9900" : null;
-      const lineColor = selected && rankColor ? rankColor : selected && isMine ? "#105182" : selected ? "#333" : colors.map.route;
-      const markerColor = live?.position === 1 ? colors.fill.red : live?.position === 2 ? "#f97316" : live?.position === 3 ? colors.fill.yellow : isMine ? colors.transport.u : colors.map.train;
+      const isLeading = live?.position === 1;
+      const rankColor = isLeading ? "#DD2222" : live?.position === 2 ? "#F97316" : live?.position === 3 ? "#DD9900" : null;
       const departure = Date.parse(journey.scheduledDeparture);
       const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
       const raceDelayMinutes = live?.raceDelayMinutes ?? journey.raceDelayMinutes ?? null;
       const cancelled = live?.cancelled ?? journey.liveStatus === "cancelled";
       const finished = live?.status === "arrived" || journey.liveStatus === "arrived";
+      const lineColor = cancelled ? "#737373" : selected ? (rankColor ?? (isMine ? "#105182" : colors.map.routeSelected)) : isLeading ? "#DD2222" : colors.map.route;
+      const markerColor = cancelled ? "#737373" : isLeading ? colors.fill.red : live?.position === 2 ? "#f97316" : live?.position === 3 ? colors.fill.yellow : isMine ? colors.transport.u : colors.map.train;
       const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
       const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
       const markerIndex = Math.min(points.length - 1, Math.floor(progress * (points.length - 1)));
       const markerPoint = points[markerIndex];
       const markerDirection = directionAngle(points, markerIndex);
       const safeDisplayName = journey.displayName.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
-      const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` (${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)})`;
-      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}</span><span class="train-map__marker" aria-label="${finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
+      const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` · ${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min`;
+      const labelState = cancelled ? " · CANCELLED" : selected || isMine ? " · YOUR TRAIN" : isLeading ? " · LEADING" : "";
+      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}${labelState}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
       return <Fragment key={journey.id}>
-        <Polyline positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine ? 6 : 3, opacity: selected || isMine ? 1 : 0.85 }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
+        <Polyline positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine || isLeading ? 6 : 3, opacity: selected || isMine || isLeading ? 1 : 0.85, dashArray: cancelled ? "8 8" : undefined }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>
         </Polyline>
-        {endpoints.slice(-1).map((point) => <CircleMarker key={`${journey.id}-arrival`} center={[point.lat, point.lon]} radius={4} pathOptions={{ color: lineColor, fillColor: lineColor, fillOpacity: 1, weight: 2 }}><Popup>Arrival: {journey.destination}</Popup></CircleMarker>)}
-        {markerPoint && !cancelled && <Marker pane="markerPane" position={[markerPoint.lat, markerPoint.lon]} icon={trainIcon} eventHandlers={{ click: () => onSelect(journey.id) }}><Popup><strong>{journey.displayName}</strong><br />{raceDelayMinutes === null || raceDelayMinutes === undefined ? "Delay unavailable" : `${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min delay gained`}</Popup></Marker>}
+        {endpoints.map((point, index) => <CircleMarker key={`${journey.id}-${index === 0 ? "origin" : "arrival"}`} center={[point.lat, point.lon]} radius={index === 0 ? 4 : 5} pathOptions={{ color: lineColor, fillColor: lineColor, fillOpacity: 1, weight: 2 }}><Popup>{index === 0 ? `Departure: ${journey.origin}` : `Arrival: ${journey.destination}`}</Popup></CircleMarker>)}
+        {markerPoint && <Marker pane="markerPane" position={[markerPoint.lat, markerPoint.lon]} icon={trainIcon} eventHandlers={{ click: () => onSelect(journey.id) }}><Popup><strong>{journey.displayName}</strong><br />{cancelled ? "Cancelled — out of the race" : raceDelayMinutes === null || raceDelayMinutes === undefined ? "Delay unavailable" : `${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min delay gained`}</Popup></Marker>}
       </Fragment>;
     })}
   </MapContainer>;

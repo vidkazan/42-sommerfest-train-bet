@@ -10,10 +10,22 @@ export class ApiError extends Error {
 
 export type Station = { stopId: string; name: string; lat: number | null; lon: number | null };
 
+export type TrainHistory = {
+  lineNumber: string;
+  trainType: string;
+  cancellation: { ratePercentage: number };
+  delay: { averageMinutes: number; minimumMinutes: number; maximumMinutes: number; delayedPercentage: number };
+  delayDistribution: Array<{ rangeStart: number | null; rangeEnd: number | null; percentage: number }>;
+  calculatedAt: string;
+};
+
 export type Journey = {
   id: string;
   externalTripId: string;
   displayName: string;
+  lineName?: string | null;
+  trainNumber?: string | null;
+  history?: TrainHistory | null;
   origin: string;
   destination: string;
   scheduledDeparture: string;

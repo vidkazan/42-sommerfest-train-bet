@@ -48,9 +48,9 @@ GRAFANA_ADMIN_PASSWORD=replace-with-a-long-random-password
 Rebuild and restart the production stack after changing the deployment configuration:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml config
-docker compose --env-file .env.prod -f docker-compose.prod.yml build nginx
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+./scripts/prod-up.sh
 ```
+
+The production helper starts the production stack with its required `.env.prod` configuration.
 
 Open `https://fcody.de/grafana/` and sign in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. Grafana, Loki, and Alloy remain internal to the Docker network; Alloy collects Docker container logs and forwards them to Loki.

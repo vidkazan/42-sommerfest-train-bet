@@ -58,7 +58,6 @@ function App() {
   };
   const [username, setUsername] = useState("");
   const [selectedTrainId, setSelectedTrainId] = useState<string | null>(null);
-  const [selectionVersion, setSelectionVersion] = useState(0);
   const [betSubmitted, setBetSubmitted] = useState(false);
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
@@ -73,7 +72,6 @@ function App() {
 
   const selectTrain = (trainId: string) => {
     setSelectedTrainId(trainId);
-    setSelectionVersion((version) => version + 1);
   };
 
 
@@ -344,7 +342,7 @@ function App() {
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} selectionVersion={selectionVersion} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
+          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
       <Card>

@@ -11,7 +11,9 @@ type DbDeparture = {
   ezGleis?: string;
   journeyId?: string;
   terminus?: string;
-  verkehrmittel?: { name?: string; kurzText?: string; mittelText?: string; langText?: string; produktGattung?: string; linienNummer?: string };
+  zugnummer?: string | number;
+  trainNumber?: string | number;
+  verkehrmittel?: { name?: string; kurzText?: string; mittelText?: string; langText?: string; produktGattung?: string; linienNummer?: string; zugnummer?: string | number; trainNumber?: string | number };
   meldungen?: Array<{ ueberschrift?: string; text?: string }>;
 };
 
@@ -205,6 +207,8 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
           return {
             tripId: entry.journeyId,
             displayName: displayName(entry.verkehrmittel),
+            lineName: entry.verkehrmittel?.linienNummer ?? null,
+            trainNumber: String(entry.verkehrmittel?.zugnummer ?? entry.verkehrmittel?.trainNumber ?? entry.zugnummer ?? entry.trainNumber ?? "") || null,
             mode: "REGIONAL_RAIL",
             realTime: Boolean(entry.ezZeit),
             place: { name: undefined, scheduledDeparture: berlinLocalTimestamp(entry.zeit) },

@@ -11,10 +11,20 @@ import { createMotisDataSource, TransitDataSourceError, type TransitRequestFailu
 import { createIntBahnDataSource } from "./int-bahn-data-source.js";
 import { createTransitRequestQueue } from "./transit-request-queue.js";
 import { eventPhrase } from "./event-phrases.js";
+import { createHistoryDataSource, type TrainHistory } from "./history-data-source.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
-const app = Fastify({ logger: true });
+const app = Fastify({
+  logger: true,
+  disableRequestLogging: true,
+});
+app.addHook("onResponse", async (request, reply) => {
+  if (request.url?.split("?", 1)[0] === "/health") return;
+  const statusCode = reply.statusCode;
+  const log = statusCode >= 500 ? request.log.error : statusCode >= 400 ? request.log.warn : request.log.info;
+  log.call(request.log, { method: request.method, url: request.url, statusCode }, "Request completed");
+});
 const transitUserAgent = "42SommerfestTrainBet/0.1";
 const logTransitFailure = (failure: TransitRequestFailure) => {
   const log = failure.kind === "http" && !failure.final ? app.log.warn : app.log.error;
@@ -36,6 +46,15 @@ const intBahnDataSource = createIntBahnDataSource({
   requestQueue: transitRequestQueue,
   maxRetries: config.transitMaxRetries,
   logFailure: logTransitFailure,
+});
+const historyDataSource = createHistoryDataSource({
+  baseUrl: config.historyServiceBaseUrl,
+  timeoutMs: config.historyServiceTimeoutMs,
+  cacheTtlSeconds: config.historyServiceCacheTtlSeconds,
+  logRequest: (event) => {
+    const log = event.outcome === "success" || event.outcome === "not_found" ? app.log.info : app.log.warn;
+    log.call(app.log, event, "Trips History API request");
+  },
 });
 const transitDataSource = config.transitProvider === "int-bahn" ? intBahnDataSource : motisDataSource;
 mkdirSync(dirname(databasePath), { recursive: true });
@@ -77,6 +96,9 @@ db.exec(`
     game_id TEXT NOT NULL REFERENCES games(id),
     external_trip_id TEXT NOT NULL,
     display_name TEXT NOT NULL,
+    line_name TEXT,
+    train_number TEXT,
+    history_json TEXT,
     origin TEXT NOT NULL,
     destination TEXT NOT NULL,
     scheduled_departure TEXT NOT NULL,
@@ -209,6 +231,9 @@ if (!columns("game_journeys").has("final_delay_minutes")) db.exec("ALTER TABLE g
 if (!columns("game_journeys").has("live_status")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_status TEXT NOT NULL DEFAULT 'waiting'");
 if (!columns("game_journeys").has("last_live_update")) db.exec("ALTER TABLE game_journeys ADD COLUMN last_live_update TEXT");
 if (!columns("game_journeys").has("live_error")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_error TEXT");
+if (!columns("game_journeys").has("line_name")) db.exec("ALTER TABLE game_journeys ADD COLUMN line_name TEXT");
+if (!columns("game_journeys").has("train_number")) db.exec("ALTER TABLE game_journeys ADD COLUMN train_number TEXT");
+if (!columns("game_journeys").has("history_json")) db.exec("ALTER TABLE game_journeys ADD COLUMN history_json TEXT");
 db.exec("CREATE INDEX IF NOT EXISTS idx_participants_game_id ON participants(game_id)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_bets_game_id ON bets(game_id)");
 db.exec(`UPDATE participants SET game_id = (SELECT id FROM games WHERE status = 'active' LIMIT 1) WHERE game_id IS NULL`);
@@ -266,19 +291,29 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
 
   const rows = [...candidates.values()];
   const eligibleRows = rows.filter((row) => row.status === "candidate");
+  const historyByTripId = new Map<string, TrainHistory | null>();
+  await Promise.all(eligibleRows.map(async (row) => {
+    if (!row.lineName || !row.trainNumber) {
+      app.log.warn({ externalTripId: row.externalTripId, displayName: row.displayName, lineName: row.lineName, trainNumber: row.trainNumber }, "Trips History lookup skipped: missing train identifiers");
+      historyByTripId.set(row.externalTripId, null);
+      return;
+    }
+    historyByTripId.set(row.externalTripId, await historyDataSource.getLineHistory(row.lineName, row.trainNumber));
+  }));
   const insert = db.prepare(`
     INSERT OR REPLACE INTO game_journeys (
       id, game_id, external_trip_id, display_name, origin, destination,
+      line_name, train_number, history_json,
       scheduled_departure, scheduled_arrival, duration_seconds, origin_stop_id,
       stop_count, realtime, status, included, exclusion_reason, route_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
   `);
   const save = db.transaction(() => {
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(gameId);
     for (const row of rows) {
       insert.run(
         crypto.randomUUID(), gameId, row.externalTripId, row.displayName, row.origin,
-        row.destination, row.scheduledDeparture, row.scheduledArrival, row.durationSeconds,
+        row.destination, row.lineName, row.trainNumber, historyByTripId.has(row.externalTripId) ? JSON.stringify(historyByTripId.get(row.externalTripId)) : null, row.scheduledDeparture, row.scheduledArrival, row.durationSeconds,
         row.originStopId, row.stopCount, row.realtime ? 1 : 0, row.status, row.exclusionReason, row.routeJson, fetchedAt,
       );
     }
@@ -291,12 +326,21 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
   return {
     fetchedAt,
     stationErrors,
-    candidates: eligibleRows,
+    candidates: eligibleRows.map((row) => ({ ...row, history: historyByTripId.get(row.externalTripId) ?? null })),
     fetchedCount: rows.length,
     includedCount: 0,
     excludedCount: rows.length - eligibleRows.length,
     stale: stale || stationErrors.length > 0,
   };
+};
+
+const parseHistory = (historyJson: string | null): TrainHistory | null => {
+  if (!historyJson) return null;
+  try {
+    return JSON.parse(historyJson) as TrainHistory;
+  } catch {
+    return null;
+  }
 };
 
 app.get("/health", async () => ({ ok: true, service: "trainbet-backend" }));
@@ -492,6 +536,8 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
 
   const journeys = db.prepare(`
     SELECT id, external_trip_id AS externalTripId, display_name AS displayName,
+      line_name AS lineName, train_number AS trainNumber,
+      history_json AS historyJson,
       origin, destination, scheduled_departure AS scheduledDeparture,
       scheduled_arrival AS scheduledArrival, duration_seconds AS durationSeconds,
       stop_count AS stopCount,
@@ -500,7 +546,8 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
     FROM game_journeys
     WHERE game_id = ?
     ORDER BY duration_seconds DESC, scheduled_departure ASC
-  `).all(game.id);
+  `).all(game.id) as Array<{ lineName: string | null; trainNumber: string | null; historyJson: string | null; [key: string]: unknown }>;
+  const journeysWithHistory = journeys.map(({ historyJson, ...journey }) => ({ ...journey, history: parseHistory(historyJson) }));
 
   const events = db.prepare(`
     SELECT id, type, payload_json AS payloadJson, created_at AS createdAt
@@ -530,7 +577,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
       updatedAt: game.updated_at,
       activatedAt: game.activated_at,
     },
-    journeys,
+    journeys: journeysWithHistory,
     counts: {
       fetched: journeyCounts.total,
       included: journeyCounts.included ?? 0,
@@ -653,6 +700,8 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
 
   const trainRows = db.prepare(`
     SELECT id, external_trip_id AS externalTripId, display_name AS displayName,
+      line_name AS lineName, train_number AS trainNumber,
+      history_json AS historyJson,
       origin, destination, scheduled_departure AS scheduledDeparture,
       scheduled_arrival AS scheduledArrival, duration_seconds AS durationSeconds,
       origin_stop_id AS originStopId, geometry, route_json AS routeJson,
@@ -662,18 +711,18 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
     FROM game_journeys
     WHERE game_id = ? AND included = 1
     ORDER BY scheduled_departure ASC
-  `).all(game.id);
+  `).all(game.id) as Array<{ lineName: string | null; trainNumber: string | null; historyJson: string | null; stopCount?: number | null; routeJson?: string | null; [key: string]: unknown }>;
   const trains = trainRows.map((train) => {
     const row = train as { stopCount?: number | null; routeJson?: string | null };
     if (row.stopCount !== null && row.stopCount !== undefined) return train;
     try {
       const stops = JSON.parse(row.routeJson ?? "[]") as unknown[];
-      return { ...train as object, stopCount: stops.length >= 2 ? Math.max(0, stops.length - 2) : null };
+      return { ...train, stopCount: stops.length >= 2 ? Math.max(0, stops.length - 2) : null };
     } catch {
       return train;
     }
   });
-  return { trains, lastUpdatedAt: null, stale: false };
+  return { trains: trains.map(({ historyJson, ...train }) => ({ ...train, history: parseHistory(historyJson) })), lastUpdatedAt: null, stale: false };
 });
 let progressRefreshRunning = false;
 

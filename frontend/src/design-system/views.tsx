@@ -16,6 +16,7 @@ export type LiveLeaderboardEntry = {
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
+export type BrandHeaderProps = { logoSrc: string };
 export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; selectionVersion: number; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
@@ -51,6 +52,10 @@ function raceStateVariant(state: RaceState) {
 
 export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps) {
   return <section className="hero">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1><p>{description}</p></section>;
+}
+
+export function BrandHeader({ logoSrc }: BrandHeaderProps) {
+  return <header className="brand-header"><img src={logoSrc} alt="" className="brand-header__logo" /><span className="brand-header__name">ChooChoo Delay Race</span></header>;
 }
 
 export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, usernameCheckLoading, usernameCheckError, onSelectTrain, onUsernameChange, onCheckUsername, onSubmit }: BetViewProps) {

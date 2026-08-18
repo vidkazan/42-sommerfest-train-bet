@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, RaceChartView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, RaceChartView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
@@ -27,7 +27,7 @@ function App() {
   const [stationResults, setStationResults] = useState<Station[]>([]);
   const [selectedStations, setSelectedStations] = useState<Station[]>([]);
   const [manualStationIds, setManualStationIds] = useState("");
-  const [gameName, setGameName] = useState("Train Bet");
+  const [gameName, setGameName] = useState("ChooChoo Delay Race");
   const [eventDate, setEventDate] = useState("2026-08-09");
   const [bettingStart, setBettingStart] = useState("17:00");
   const [bettingEnd, setBettingEnd] = useState("18:00");
@@ -249,7 +249,7 @@ function App() {
     setAdminLoading(true);
     setAdminError(null);
     try {
-      const result = await api.createGame({ name: gameName.trim() || "Train Bet", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
+      const result = await api.createGame({ name: gameName.trim() || "ChooChoo Delay Race", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
       setAdminGame(result.game);
       setAdminGames((current) => [result.game, ...current]);
       setAdminView("review");
@@ -309,12 +309,13 @@ function App() {
   };
 
   if (mode === "not-found") {
-    return <main className="app-shell"><section className="card"><h1>Game not found</h1><p>Open a game using its shared game link.</p></section></main>;
+    return <main className="app-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><section className="card"><h1>Game not found</h1><p>Open a game using its shared game link.</p></section></main>;
   }
 
   if (mode === "admin") {
     return (
       <main className="app-shell">
+        <BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} />
         <section className="hero">
           <p className="eyebrow">Admin mode</p>
           <h1>Game setup</h1>
@@ -339,6 +340,7 @@ function App() {
 
   return (
     <main className="app-shell public-shell">
+      <BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} />
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0

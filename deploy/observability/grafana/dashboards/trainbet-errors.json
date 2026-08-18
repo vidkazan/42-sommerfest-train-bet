@@ -26,7 +26,7 @@
   "tags": ["trainbet", "errors"],
   "templating": {"list": []},
   "time": {"from": "now-6h", "to": "now"},
-  "title": "TrainBet errors",
+  "title": "ChooChoo Delay Race errors",
   "uid": "trainbet-errors",
   "version": 1
 }

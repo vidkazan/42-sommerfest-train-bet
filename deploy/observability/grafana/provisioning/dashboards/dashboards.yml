@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: TrainBet
+  - name: ChooChoo Delay Race
     orgId: 1
-    folder: TrainBet
+    folder: ChooChoo Delay Race
     type: file
     disableDeletion: true
     updateIntervalSeconds: 30

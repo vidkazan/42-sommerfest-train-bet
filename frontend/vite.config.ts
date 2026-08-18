@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: env.VITE_BASE_PATH || "/",
     plugins: [react()],
-    server: { host: "0.0.0.0", allowedHosts: ["fcody.de"] },
-    preview: { host: "0.0.0.0", allowedHosts: ["fcody.de"] },
+    server: { host: "0.0.0.0", allowedHosts: ["fcody.de", "www.fcody.de"] },
+    preview: { host: "0.0.0.0", allowedHosts: ["fcody.de", "www.fcody.de"] },
   };
 });

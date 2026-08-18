@@ -20,6 +20,6 @@ RUN npm run build
 FROM base AS production
 WORKDIR /app
 ENV NODE_ENV=production
-RUN npm prune --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]
+COPY vite.preview.config.mjs ./vite.preview.config.mjs
+CMD ["npm", "run", "preview", "--", "--config", "/app/vite.preview.config.mjs"]

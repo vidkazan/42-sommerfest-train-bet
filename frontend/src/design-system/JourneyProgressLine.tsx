@@ -19,6 +19,6 @@ export function JourneyProgressLine({ journey, referenceDate, className = "" }: 
   const cancelled = journey.status === "cancelled" || journey.liveStatus === "cancelled";
   const progress = cancelled ? 0 : progressAt(journey, now);
   return <span className={`ds-journey-progress ${className}`.trim()} role="progressbar" aria-label="Journey progress" aria-valuemin={0} aria-valuemax={1} aria-valuenow={progress}>
-    {progress > 0 && progress < 1 && <span className="ds-journey-progress__value" style={{ left: `${progress * 100}%` }} />}
+    <span className="ds-journey-progress__value" style={{ width: `${progress * 100}%` }} />
   </span>;
 }

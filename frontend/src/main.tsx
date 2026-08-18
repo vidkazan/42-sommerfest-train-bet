@@ -371,7 +371,7 @@ function App() {
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMapView journeys={journeys} mapEvents={betSubmitted ? [] : game?.mapEvents} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
+          ? <TrainMapView journeys={journeys} mapEvents={game?.mapEvents} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
       <Card>

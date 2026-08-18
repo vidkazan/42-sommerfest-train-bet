@@ -81,16 +81,19 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
   const [activeBadgeDescription, setActiveBadgeDescription] = useState<string | null>(null);
   const toggleBadgeDescription = (description: string) => setActiveBadgeDescription((current) => current === description ? null : description);
   return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ds-journey-cell ds-journey-card--${mode} ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
-    {mode === "leaderboard" && <div className="ds-journey-card__labels">
-      <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>{formatPlace(position)}</Badge> : <Badge variant="secondary">{formatPlace(position)}</Badge>}</strong>
-      {isCurrentUser && <Badge variant="blue">My train</Badge>}
-      {raceStatus && <Badge variant={raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
-      {mode === "leaderboard" && delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
-      {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
+    {mode === "leaderboard" && <div className="ds-journey-card__leaderboard-top">
+      <div className="ds-journey-card__labels">
+        <strong className="ds-journey-card__position">{rankBadge ? <Badge variant={rankBadge} className={rankBadgeClass}>{formatPlace(position)}</Badge> : <Badge variant="secondary">{formatPlace(position)}</Badge>}</strong>
+        <strong className={`ds-journey-card__leaderboard-line ds-text-medium ${leg.cancelled ? "cancelled" : ""}`.trim()} aria-label={`Line ${leg.lineName}`}>{leg.lineName}</strong>
+        {isCurrentUser && <Badge variant="blue">My train</Badge>}
+        {raceStatus && <Badge variant={raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
+        {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
+      </div>
+      {delayBadge && <Badge variant="secondary">{delayBadge}</Badge>}
     </div>}
-    <div className="ds-journey-cell__line">
+    {mode !== "leaderboard" && <div className="ds-journey-cell__line">
       <span className={`ds-journey-line-badge ds-journey-line-badge--${leg.transport} ${leg.cancelled ? "cancelled" : ""}`.trim()} aria-label={`Line ${leg.lineName}`}>{leg.lineName}</span>
-    </div>
+    </div>}
     <div className="ds-journey-cell__route">
       <span className="ds-journey-cell__route-text">{journey.origin} → {journey.destination}</span>
     </div>

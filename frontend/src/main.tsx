@@ -10,9 +10,13 @@ type AppMode = "public" | "admin" | "not-found";
 type AdminView = "access" | "create" | "review" | "active";
 
 function App() {
-  const gamePathMatch = window.location.pathname.match(/^\/game\/([^/]+)\/?$/);
+  const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const pathWithoutBase = appBasePath && window.location.pathname.startsWith(appBasePath)
+    ? window.location.pathname.slice(appBasePath.length) || "/"
+    : window.location.pathname;
+  const gamePathMatch = pathWithoutBase.match(/^\/game\/([^/]+)\/?$/);
   const publicGameId = gamePathMatch?.[1] ?? null;
-  const mode: AppMode = window.location.pathname === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
+  const mode: AppMode = pathWithoutBase === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
   const [publicView, setPublicView] = useState<PublicView>("browse");
   const [adminView, setAdminView] = useState<AdminView>("access");
   const [adminToken, setAdminToken] = useState<string | null>(null);

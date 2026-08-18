@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import type { Game, Journey, LiveEvent, Station } from "../api/client";
+import type { Game, Journey, LiveEvent, MapEvent, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
 import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
@@ -17,7 +17,7 @@ export type LiveLeaderboardEntry = {
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type BrandHeaderProps = { logoSrc: string };
-export type TrainMapViewProps = { journeys: Journey[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
+export type TrainMapViewProps = { journeys: Journey[]; mapEvents?: MapEvent[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void };
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; onSelectTrain: (trainId: string) => void };
@@ -34,7 +34,7 @@ export type AdminSetupViewProps = {
   onManualStationIdsChange: (value: string) => void; onGameNameChange: (value: string) => void; onEventDateChange: (value: string) => void;
   onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onCreateGame: () => void;
 };
-export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; selectedJourneyIds: string[]; loading: boolean; whitelistSaved: boolean; error: string | null; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
+export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
 
 type RaceState = "OUT OF THE RACE";
@@ -312,7 +312,7 @@ export function AdminSetupView({ stationQuery, stationResults, selectedStations,
   </>;
 }
 
-export function AdminReviewView({ game, journeys, minimumDuration, selectedJourneyIds, loading, whitelistSaved, error, onFetch, onMinimumDurationChange, onToggleJourney, onSave, onActivate }: AdminReviewViewProps) {
+export function AdminReviewView({ game, journeys, minimumDuration, selectedJourneyIds, disruptionsJson, constructionJson, footballJson, skippedDisruptions, disruptionMessage, loading, whitelistSaved, error, onDisruptionsJsonChange, onConstructionJsonChange, onFootballJsonChange, onApplyDisruptions, onFetch, onMinimumDurationChange, onToggleJourney, onSave, onActivate }: AdminReviewViewProps) {
   return <>
     <h2>{game.name}</h2>
     <p>Draft created. Next, fetch candidate journeys for the selected stations.</p>
@@ -325,6 +325,19 @@ export function AdminReviewView({ game, journeys, minimumDuration, selectedJourn
       </select>
       <div className="journey-list" aria-label="Candidate journeys">{journeys.filter((journey) => journey.durationSeconds >= Number(minimumDuration) * 3600).map((journey) => <JourneyCard key={journey.externalTripId} journey={journey} mode="admin" selected={selectedJourneyIds.includes(journey.externalTripId)} onToggle={(selectedJourney) => onToggleJourney(selectedJourney.externalTripId)} />)}</div>
       <Button type="button" disabled={loading || selectedJourneyIds.length === 0} onClick={onSave}>{loading ? "Saving…" : `Save whitelist (${selectedJourneyIds.length})`}</Button>
+      {whitelistSaved && <section className="admin-disruptions" aria-label="Railway disruptions">
+        <h3>Map events</h3>
+        <p className="field-help">Paste events after selecting journeys. Disruptions and Baustellen use 1 km; football matches use 10 km from selected journey paths.</p>
+        <label className="field-label" htmlFor="disruptions-json">Disruptions JSON</label>
+        <textarea id="disruptions-json" value={disruptionsJson} onChange={(event) => onDisruptionsJsonChange(event.target.value)} placeholder='Paste a JSON array from the disruption feed' rows={8} />
+        <label className="field-label" htmlFor="construction-json">Baustellen JSON</label>
+        <textarea id="construction-json" value={constructionJson} onChange={(event) => onConstructionJsonChange(event.target.value)} placeholder='Paste a JSON array from the Baustellen feed' rows={8} />
+        <label className="field-label" htmlFor="football-json">Football matches JSON</label>
+        <textarea id="football-json" value={footballJson} onChange={(event) => onFootballJsonChange(event.target.value)} placeholder='Paste a JSON array of matches' rows={8} />
+        <Button type="button" variant="secondary" onClick={onApplyDisruptions} disabled={loading}>{loading ? "Applying…" : "Apply disruptions"}</Button>
+        {disruptionMessage && <p className="field-help" role="status">{disruptionMessage}</p>}
+        {skippedDisruptions.length > 0 && <p className="field-help" role="status">{skippedDisruptions.length} map event record(s) were skipped.</p>}
+      </section>}
       <Button type="button" variant="secondary" disabled={loading || !whitelistSaved} onClick={onActivate}>Activate game</Button>
     </>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -380,7 +393,60 @@ function directionAngle(points: Array<{ lat: number; lon: number }>, index: numb
   return Math.round((Math.atan2(target.lon - current.lon, target.lat - current.lat) * 180) / Math.PI);
 }
 
-export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
+function trainPosition(journey: Journey, points: Array<{ lat: number; lon: number }>, live?: LiveLeaderboardEntry) {
+  if (!points.length) return null;
+  const departure = Date.parse(journey.scheduledDeparture);
+  const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
+  const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
+  const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure
+    ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
+  return points[Math.min(points.length - 1, Math.floor(progress * (points.length - 1)))];
+}
+
+function MapSelectedLineHandler({ points, selectedTrainId }: { points: Array<{ lat: number; lon: number }>; selectedTrainId: string | null }) {
+  const map = useMap();
+  const pointsKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
+  useEffect(() => {
+    if (!selectedTrainId || !points.length) return;
+    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
+    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
+  }, [map, pointsKey, selectedTrainId]);
+  return null;
+}
+
+function MapEventLayer({ mapEvents }: { mapEvents: MapEvent[] }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  useEffect(() => {
+    const updateZoom = () => setZoom(map.getZoom());
+    map.on("zoomend", updateZoom);
+    return () => { map.off("zoomend", updateZoom); };
+  }, [map]);
+  const clusterSize = Math.max(0.001, Math.min(0.25, 0.5 / 2 ** Math.max(0, zoom - 5)));
+  const eventGroups = [...mapEvents.reduce((groups, event) => {
+    const latitudeCell = Math.floor(event.latitude / clusterSize);
+    const longitudeCell = Math.floor(event.longitude / clusterSize);
+    const key = `${latitudeCell}:${longitudeCell}`;
+    const current = groups.get(key) ?? [];
+    current.push(event);
+    groups.set(key, current);
+    return groups;
+  }, new Map<string, MapEvent[]>()).values()].map((events) => ({
+    events,
+    latitude: events.reduce((sum, event) => sum + event.latitude, 0) / events.length,
+    longitude: events.reduce((sum, event) => sum + event.longitude, 0) / events.length,
+  }));
+  const eventIcon = (events: MapEvent[]) => {
+    const category = events[0]?.category ?? "disruption";
+    const symbol = events.length > 1 ? events.length : category === "construction" ? "⚒" : category === "football" ? "⚽" : "⚠";
+    return new DivIcon({ className: "train-map__event-icon", html: `<span class="train-map__event-marker train-map__event-marker--${category}">${symbol}</span>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+  };
+  return <>{eventGroups.map((group) => <Marker key={group.events.map((event) => event.id).join("-")} position={[group.latitude, group.longitude]} icon={eventIcon(group.events)}>
+    <Popup><div className="train-map__event-popup">{group.events.map((event) => <article key={event.id}><strong>{event.title}</strong><p>{event.description ?? (event.category === "football" ? "Football match" : "Railway event")}</p><small>{new Date(event.startsAt).toLocaleString()} – {new Date(event.endsAt).toLocaleString()}</small></article>)}</div></Popup>
+  </Marker>)}</>;
+}
+
+export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEntries, currentParticipantId, onSelect }: TrainMapViewProps) {
   const routes = journeys.map((journey) => {
     const live = liveEntries.find((train) => train.trainId === journey.id);
     const geometry = live?.geometry ?? journey.geometry;
@@ -397,10 +463,13 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
   }).filter((route) => route.points.length > 0);
   const allPoints = routes.flatMap((route) => route.points);
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
+  const selectedRoute = routes.find((route) => route.journey.id === selectedTrainId);
 
   return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
     <MapResizeHandler />
     <MapFitTrips points={allPoints} />
+    <MapSelectedLineHandler points={selectedRoute?.points ?? []} selectedTrainId={selectedTrainId} />
+    <MapEventLayer mapEvents={mapEvents} />
     <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
     <div className="train-map__caption">The train with the biggest delay gain wins.</div>
     <div className="train-map__legend" aria-label="Map legend">
@@ -408,6 +477,9 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
       <span><i className="train-map__legend-swatch train-map__legend-swatch--mine" />Your train</span>
       <span><i className="train-map__legend-swatch train-map__legend-swatch--leader" />Leading</span>
       <span><i className="train-map__legend-swatch train-map__legend-swatch--cancelled" />Cancelled</span>
+      <span><i className="train-map__legend-event" />Disruption</span>
+      <span><i className="train-map__legend-event train-map__legend-event--construction" />Baustelle</span>
+      <span><i className="train-map__legend-event train-map__legend-event--football" />Football</span>
     </div>
     {[...routes].sort((a, b) => {
       const aEntry = liveEntries.find((entry) => entry.trainId === a.journey.id);
@@ -422,19 +494,17 @@ export function TrainMapView({ journeys, selectedTrainId, liveEntries, currentPa
       const isMine = live?.bettors.some((bettor) => bettor.participantId === currentParticipantId) ?? false;
       const isLeading = live?.position === 1;
       const rankColor = isLeading ? "#DD2222" : live?.position === 2 ? "#F97316" : live?.position === 3 ? "#DD9900" : null;
-      const departure = Date.parse(journey.scheduledDeparture);
       const actualArrival = live?.actualArrival ?? journey.actualArrival ?? null;
       const raceDelayMinutes = live?.raceDelayMinutes ?? journey.raceDelayMinutes ?? null;
       const cancelled = live?.cancelled ?? journey.liveStatus === "cancelled";
       const finished = live?.status === "arrived" || journey.liveStatus === "arrived";
       const lineColor = cancelled ? "#737373" : selected ? (rankColor ?? (isMine ? "#105182" : colors.map.routeSelected)) : isLeading ? "#DD2222" : colors.map.route;
       const markerColor = cancelled ? "#737373" : isLeading ? colors.fill.red : live?.position === 2 ? "#f97316" : live?.position === 3 ? colors.fill.yellow : isMine ? colors.transport.u : colors.map.train;
-      const arrival = Date.parse(actualArrival ?? journey.scheduledArrival ?? "");
-      const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
-      const markerIndex = Math.min(points.length - 1, Math.floor(progress * (points.length - 1)));
-      const markerPoint = points[markerIndex];
+      const markerPoint = trainPosition(journey, points, live);
+      const markerIndex = points.indexOf(markerPoint ?? points[0]);
       const markerDirection = directionAngle(points, markerIndex);
-      const safeDisplayName = journey.displayName.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+      const lineName = journey.lineName ?? journey.displayName.match(/^([^\s(]+(?:\s*\d+[A-Z]?))/i)?.[1] ?? journey.displayName;
+      const safeDisplayName = lineName.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
       const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` · ${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min`;
       const labelState = cancelled ? " · CANCELLED" : selected || isMine ? " · YOUR TRAIN" : isLeading ? " · LEADING" : "";
       const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}${labelState}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });

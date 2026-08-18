@@ -10,6 +10,20 @@ export class ApiError extends Error {
 
 export type Station = { stopId: string; name: string; lat: number | null; lon: number | null };
 
+export type MapEvent = {
+  id: string;
+  category: "disruption" | "construction" | "football";
+  title: string;
+  description: string | null;
+  latitude: number;
+  longitude: number;
+  startsAt: string;
+  endsAt: string;
+  severity: "info" | "warning" | "severe";
+  source: "manual";
+};
+export type SkippedDisruption = { key: string; reason: string };
+
 export type TrainHistory = {
   lineNumber: string;
   trainType: string;
@@ -26,6 +40,7 @@ export type Journey = {
   lineName?: string | null;
   trainNumber?: string | null;
   history?: TrainHistory | null;
+  eventCounts?: { football: number; disruption: number; construction: number };
   origin: string;
   destination: string;
   scheduledDeparture: string;
@@ -59,6 +74,7 @@ export type Game = {
   bettingStart?: string;
   bettingEnd?: string;
   stopIds?: string[];
+  mapEvents?: MapEvent[];
 };
 
 export type LiveEvent = {
@@ -108,7 +124,13 @@ export const api = {
     request<Station[]>(`/api/admin/stations/search?text=${encodeURIComponent(text)}`, {}, token),
 
   createGame: (body: { name?: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; stopIds: string[] }, token: string) =>
-    request<{ game: Game }>("/api/admin/games", { method: "POST", body: JSON.stringify(body) }, token),
+    request<{ game: Game; skippedDisruptions?: SkippedDisruption[] }>("/api/admin/games", { method: "POST", body: JSON.stringify(body) }, token),
+  applyDisruptions: (gameId: string, disruptionsJson: string, constructionJson: string, footballJson: string, token: string, preview = false) =>
+    request<{ preview: boolean; mapEvents: MapEvent[]; skippedDisruptions: SkippedDisruption[]; appliedAt?: string }>(
+      `/api/admin/games/${gameId}/disruptions/apply`,
+      { method: "POST", body: JSON.stringify({ disruptionsJson, constructionJson, footballJson, preview }) },
+      token,
+    ),
   listAdminGames: (token: string) => request<{ games: Game[] }>("/api/admin/games", {}, token),
   removeGame: (gameId: string, token: string) => request<{ gameId: string; removed: true }>(`/api/admin/games/${gameId}/remove`, { method: "POST" }, token),
 

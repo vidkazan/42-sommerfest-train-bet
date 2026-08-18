@@ -12,12 +12,14 @@ import { createIntBahnDataSource } from "./int-bahn-data-source.js";
 import { createTransitRequestQueue } from "./transit-request-queue.js";
 import { eventPhrase } from "./event-phrases.js";
 import { createHistoryDataSource, type TrainHistory } from "./history-data-source.js";
+import { countEventsByCategory, filterEventsByJourneyPaths, parseConstructionJson, parseDisruptionsJson, parseFootballJson, type MapEvent } from "./map-events.js";
 
 const port = config.port;
 const databasePath = config.databasePath;
 const app = Fastify({
   logger: true,
   disableRequestLogging: true,
+  bodyLimit: config.requestBodyLimitBytes,
 });
 app.addHook("onResponse", async (request, reply) => {
   if (request.url?.split("?", 1)[0] === "/health") return;
@@ -133,8 +135,23 @@ db.exec(`
     created_at TEXT NOT NULL,
     dedupe_key TEXT
   );
+  CREATE TABLE IF NOT EXISTS game_map_events (
+    id TEXT NOT NULL,
+    game_id TEXT NOT NULL REFERENCES games(id),
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    source TEXT NOT NULL,
+    PRIMARY KEY (game_id, id)
+  );
   CREATE INDEX IF NOT EXISTS idx_game_journeys_game_id ON game_journeys(game_id);
   CREATE INDEX IF NOT EXISTS idx_game_events_game_id ON game_events(game_id);
+  CREATE INDEX IF NOT EXISTS idx_game_map_events_game_id ON game_map_events(game_id);
   CREATE TABLE IF NOT EXISTS journey_delay_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id TEXT NOT NULL REFERENCES games(id),
@@ -376,6 +393,7 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/remove", async (reque
       )`).run(game.id, game.id);
     db.prepare("DELETE FROM participants WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM journey_delay_snapshots WHERE game_id = ?").run(game.id);
+    db.prepare("DELETE FROM game_map_events WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_events WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM games WHERE id = ?").run(game.id);
@@ -471,8 +489,63 @@ app.post<{
       status: "draft",
       stopIds,
       createdAt: now,
+      mapEvents: [],
     },
   });
+});
+
+app.post<{
+  Params: { id: string };
+  Body: { disruptionsJson?: string; constructionJson?: string; footballJson?: string; preview?: boolean };
+}>("/api/admin/games/:id/disruptions/apply", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  const game = db.prepare(`
+    SELECT id, status, event_date AS eventDate, betting_start AS bettingStart, betting_end AS bettingEnd,
+      journey_departure_start AS journeyDepartureStart, journey_departure_end AS journeyDepartureEnd
+    FROM games WHERE id = ?
+  `).get(request.params.id) as { id: string; status: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string } | undefined;
+  if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
+  if (game.status !== "draft") return reply.code(409).send({ error: "GAME_NOT_DRAFT" });
+  const selectedRoutes = db.prepare("SELECT route_json AS routeJson FROM game_journeys WHERE game_id = ? AND included = 1").all(game.id) as Array<{ routeJson: string | null }>;
+  if (!selectedRoutes.length) return reply.code(400).send({ error: "JOURNEYS_MUST_BE_SELECTED" });
+  const routes = selectedRoutes.flatMap((row) => {
+    try {
+      const parsed = JSON.parse(row.routeJson ?? "[]") as Array<{ lat?: number; lon?: number }>;
+      return [parsed.filter((point): point is { lat: number; lon: number } => Number.isFinite(point.lat) && Number.isFinite(point.lon))];
+    } catch {
+      return [[]];
+    }
+  });
+  const timestamps = [game.bettingStart, game.bettingEnd, game.journeyDepartureStart, game.journeyDepartureEnd].map((value) => new Date(value).getTime());
+  const windowStart = Math.min(...timestamps) - 2 * 60 * 60 * 1000;
+  const windowEnd = Math.max(...timestamps) + 2 * 60 * 60 * 1000;
+  let snapshot: ReturnType<typeof parseDisruptionsJson>;
+  try {
+    const disruptions = parseDisruptionsJson(request.body?.disruptionsJson, windowStart, windowEnd);
+    const construction = parseConstructionJson(request.body?.constructionJson, windowStart, windowEnd);
+    const football = parseFootballJson(request.body?.footballJson, game.eventDate, windowStart, windowEnd);
+    snapshot = { events: [...disruptions.events, ...construction.events, ...football.events], skipped: [...disruptions.skipped, ...construction.skipped, ...football.skipped] };
+  } catch (error) {
+    return reply.code(400).send({ error: error instanceof Error ? error.message : "INVALID_DISRUPTIONS_JSON" });
+  }
+  const closeEvents = filterEventsByJourneyPaths(snapshot.events.filter((event) => event.category !== "football"), routes, 1);
+  const nearbyFootball = filterEventsByJourneyPaths(snapshot.events.filter((event) => event.category === "football"), routes, 10);
+  const acceptedEvents = [...closeEvents.accepted, ...nearbyFootball.accepted];
+  const skippedDisruptions = [...snapshot.skipped, ...closeEvents.skipped, ...nearbyFootball.skipped];
+  if (request.body?.preview) return { preview: true, mapEvents: acceptedEvents, skippedDisruptions };
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare("DELETE FROM game_map_events WHERE game_id = ?").run(game.id);
+    const insert = db.prepare(`
+      INSERT INTO game_map_events (id, game_id, category, title, description, latitude, longitude, starts_at, ends_at, severity, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const event of acceptedEvents) insert.run(event.id, game.id, event.category, event.title, event.description, event.latitude, event.longitude, event.startsAt, event.endsAt, event.severity, event.source);
+    db.prepare("UPDATE games SET updated_at = ? WHERE id = ?").run(now, game.id);
+    db.prepare("INSERT INTO game_events (id, game_id, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(crypto.randomUUID(), game.id, "disruptions_applied", JSON.stringify({ acceptedCount: acceptedEvents.length, skippedCount: skippedDisruptions.length }), now);
+  })();
+  return { preview: false, mapEvents: acceptedEvents, skippedDisruptions, appliedAt: now };
 });
 
 app.post<{ Params: { id: string } }>("/api/admin/games/:id/fetch-journeys", async (request, reply) => {
@@ -584,6 +657,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
       excluded: journeyCounts.excluded ?? 0,
     },
     events,
+    mapEvents: getMapEvents(game.id),
   };
 });
 
@@ -687,10 +761,16 @@ const getPublicGame = (id: string) => {
   return game && game.status !== "draft" ? game : undefined;
 };
 
+const getMapEvents = (gameId: string): MapEvent[] => db.prepare(`
+  SELECT id, category, title, description, latitude, longitude,
+    starts_at AS startsAt, ends_at AS endsAt, severity, source
+  FROM game_map_events WHERE game_id = ? ORDER BY starts_at ASC, id ASC
+`).all(gameId) as MapEvent[];
+
 app.get<{ Params: { id: string } }>("/api/games/:id", async (request, reply) => {
   const game = getPublicGame(request.params.id);
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
-  return { game: { id: game.id, name: game.name, eventDate: game.event_date, timezone: game.timezone, bettingStart: game.betting_start, bettingEnd: game.betting_end, status: game.status } };
+  return { game: { id: game.id, name: game.name, eventDate: game.event_date, timezone: game.timezone, bettingStart: game.betting_start, bettingEnd: game.betting_end, status: game.status, mapEvents: getMapEvents(game.id) } };
 });
 
 app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, reply) => {
@@ -712,15 +792,25 @@ app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, rep
     WHERE game_id = ? AND included = 1
     ORDER BY scheduled_departure ASC
   `).all(game.id) as Array<{ lineName: string | null; trainNumber: string | null; historyJson: string | null; stopCount?: number | null; routeJson?: string | null; [key: string]: unknown }>;
+  const mapEvents = getMapEvents(game.id);
   const trains = trainRows.map((train) => {
     const row = train as { stopCount?: number | null; routeJson?: string | null };
-    if (row.stopCount !== null && row.stopCount !== undefined) return train;
+    let result = train;
+    if (row.stopCount !== null && row.stopCount !== undefined) result = train;
     try {
       const stops = JSON.parse(row.routeJson ?? "[]") as unknown[];
-      return { ...train, stopCount: stops.length >= 2 ? Math.max(0, stops.length - 2) : null };
+      result = { ...result, stopCount: row.stopCount !== null && row.stopCount !== undefined ? row.stopCount : stops.length >= 2 ? Math.max(0, stops.length - 2) : null };
     } catch {
-      return train;
+      result = { ...result, stopCount: row.stopCount ?? null };
     }
+    let route = [] as Array<{ lat: number; lon: number }>;
+    try {
+      const parsed = JSON.parse(row.routeJson ?? "[]") as Array<{ lat?: unknown; lon?: unknown }>;
+      route = parsed.filter((point): point is { lat: number; lon: number } => typeof point.lat === "number" && Number.isFinite(point.lat) && typeof point.lon === "number" && Number.isFinite(point.lon));
+    } catch {
+      route = [];
+    }
+    return { ...result, eventCounts: countEventsByCategory(mapEvents, route) };
   });
   return { trains: trains.map(({ historyJson, ...train }) => ({ ...train, history: parseHistory(historyJson) })), lastUpdatedAt: null, stale: false };
 });

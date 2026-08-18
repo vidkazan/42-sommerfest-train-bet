@@ -33,6 +33,9 @@ function App() {
   const [bettingEnd, setBettingEnd] = useState("18:00");
   const [journeyDepartureStart, setJourneyDepartureStart] = useState("17:00");
   const [journeyDepartureEnd, setJourneyDepartureEnd] = useState("17:30");
+  const [disruptionsJson, setDisruptionsJson] = useState("");
+  const [constructionJson, setConstructionJson] = useState("");
+  const [footballJson, setFootballJson] = useState("");
   const [stationLoading, setStationLoading] = useState(false);
   const [stationError, setStationError] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -42,6 +45,8 @@ function App() {
   const [selectedJourneyIds, setSelectedJourneyIds] = useState<string[]>([]);
   const [minimumJourneyDuration, setMinimumJourneyDuration] = useState("0");
   const [whitelistSaved, setWhitelistSaved] = useState(false);
+  const [skippedDisruptions, setSkippedDisruptions] = useState<Array<{ key: string; reason: string }>>([]);
+  const [disruptionMessage, setDisruptionMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -249,10 +254,34 @@ function App() {
     try {
       const result = await api.createGame({ name: gameName.trim() || "ChooChoo Delay Race", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
       setAdminGame(result.game);
+      setSkippedDisruptions([]);
+      setDisruptionMessage(null);
       setAdminGames((current) => [result.game, ...current]);
       setAdminView("review");
     } catch (reason: unknown) {
       setAdminError(reason instanceof Error ? reason.message : "Could not create game");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const applyDisruptions = async () => {
+    if (!adminToken || !adminGame) return;
+    setAdminLoading(true);
+    setAdminError(null);
+    setDisruptionMessage(null);
+    try {
+      const preview = await api.applyDisruptions(adminGame.id, disruptionsJson, constructionJson, footballJson, adminToken, true);
+      const accepted = preview.mapEvents.length;
+      const skipped = preview.skippedDisruptions.length;
+      const confirmed = window.confirm(`Apply ${accepted} disruption${accepted === 1 ? "" : "s"}${skipped ? ` and skip ${skipped}` : ""}? This replaces the existing snapshot.`);
+      if (!confirmed) return;
+      const result = await api.applyDisruptions(adminGame.id, disruptionsJson, constructionJson, footballJson, adminToken);
+      setAdminGame((current) => current ? { ...current, mapEvents: result.mapEvents } : current);
+      setSkippedDisruptions(result.skippedDisruptions);
+      setDisruptionMessage(`Applied ${result.mapEvents.length} map event${result.mapEvents.length === 1 ? "" : "s"}.`);
+    } catch (reason: unknown) {
+      setAdminError(reason instanceof Error ? reason.message : "Could not apply disruptions");
     } finally {
       setAdminLoading(false);
     }
@@ -327,7 +356,7 @@ function App() {
               <AdminSetupView stationQuery={stationQuery} stationResults={stationResults} selectedStations={selectedStations} manualStationIds={manualStationIds} stationLoading={stationLoading} stationError={stationError} gameName={gameName} eventDate={eventDate} bettingStart={bettingStart} bettingEnd={bettingEnd} journeyDepartureStart={journeyDepartureStart} journeyDepartureEnd={journeyDepartureEnd} loading={adminLoading} error={adminError} onStationQueryChange={setStationQuery} onSearchStations={searchStations} onToggleStation={updateStationSelection} onManualStationIdsChange={updateManualStationIds} onGameNameChange={setGameName} onEventDateChange={setEventDate} onBettingStartChange={setBettingStart} onBettingEndChange={setBettingEnd} onJourneyStartChange={setJourneyDepartureStart} onJourneyEndChange={setJourneyDepartureEnd} onCreateGame={createDraftGame} />
             </>
           )}
-          {adminView === "review" && adminGame && <AdminReviewView game={adminGame} journeys={journeys} minimumDuration={minimumJourneyDuration} selectedJourneyIds={selectedJourneyIds} loading={adminLoading} whitelistSaved={whitelistSaved} error={adminError} onFetch={fetchAdminJourneys} onMinimumDurationChange={setMinimumJourneyDuration} onToggleJourney={toggleAdminJourney} onSave={saveAdminWhitelist} onActivate={activateAdminGame} />}
+          {adminView === "review" && adminGame && <AdminReviewView game={adminGame} journeys={journeys} minimumDuration={minimumJourneyDuration} selectedJourneyIds={selectedJourneyIds} disruptionsJson={disruptionsJson} constructionJson={constructionJson} footballJson={footballJson} skippedDisruptions={skippedDisruptions} disruptionMessage={disruptionMessage} loading={adminLoading} whitelistSaved={whitelistSaved} error={adminError} onDisruptionsJsonChange={setDisruptionsJson} onConstructionJsonChange={setConstructionJson} onFootballJsonChange={setFootballJson} onApplyDisruptions={applyDisruptions} onFetch={fetchAdminJourneys} onMinimumDurationChange={setMinimumJourneyDuration} onToggleJourney={toggleAdminJourney} onSave={saveAdminWhitelist} onActivate={activateAdminGame} />}
           {adminView === "active" && adminGame && <AdminActiveView game={adminGame} />}
         </section>
       </main>
@@ -342,7 +371,7 @@ function App() {
       <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
       <section aria-label="Train map">
         {!loading && journeys.length > 0
-          ? <TrainMapView journeys={journeys} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
+          ? <TrainMapView journeys={journeys} mapEvents={betSubmitted ? [] : game?.mapEvents} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
       </section>
       <Card>

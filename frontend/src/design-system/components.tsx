@@ -4,8 +4,8 @@ import { colors, type TransportType } from "./tokens";
 export type BadgeVariant = "secondary" | "primary" | "red" | "green" | "yellow" | "orange" | "blue" | "accent" | "construction" | "clear";
 const badgeColors: Record<BadgeVariant, string> = { secondary: "color-mix(in srgb, var(--chew-fill-tertiary) 30%, transparent)", primary: colors.fill.tertiary, red: colors.fill.red, green: colors.fill.green, yellow: colors.fill.yellow, orange: "#f97316", blue: colors.transport.u, accent: colors.fill.accent, construction: "#8b5cf6", clear: "transparent" };
 
-export function Badge({ children, variant = "primary", gradient, className = "", onClick, "aria-expanded": ariaExpanded }: { children: ReactNode; variant?: BadgeVariant; gradient?: [string, string]; className?: string; onClick?: MouseEventHandler<HTMLButtonElement>; "aria-expanded"?: boolean }) {
-  const style: CSSProperties = { background: gradient ? `linear-gradient(90deg, ${gradient[0]}, ${gradient[1]})` : badgeColors[variant] };
+export function Badge({ children, variant = "primary", gradient, className = "", style: customStyle, onClick, "aria-expanded": ariaExpanded }: { children: ReactNode; variant?: BadgeVariant; gradient?: [string, string]; className?: string; style?: CSSProperties; onClick?: MouseEventHandler<HTMLButtonElement>; "aria-expanded"?: boolean }) {
+  const style: CSSProperties = { background: gradient ? `linear-gradient(90deg, ${gradient[0]}, ${gradient[1]})` : badgeColors[variant], ...customStyle };
   if (onClick) return <button type="button" className={`ds-badge ${className}`.trim()} style={style} onClick={onClick} aria-expanded={ariaExpanded}>{children}</button>;
   return <span className={`ds-badge ${className}`.trim()} style={style}>{children}</span>;
 }

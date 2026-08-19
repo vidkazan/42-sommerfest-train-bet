@@ -73,6 +73,7 @@ export type Game = {
   journeyDepartureEnd?: string;
   bettingStart?: string;
   bettingEnd?: string;
+  gameEndTime?: string;
   stopIds?: string[];
   mapEvents?: MapEvent[];
 };
@@ -102,6 +103,20 @@ export type JourneyFetchResult = {
   stationErrors?: string[];
 };
 
+export type AdminDashboard = {
+  state: "no_active_game" | "waiting" | "live" | "finished";
+  game: { id: string; name: string; eventDate: string; timezone: string; status: string; gameEndTime: string; bettingStart: string; bettingEnd: string } | null;
+  entries: Array<{
+    trainId: string; displayName: string; origin: string; destination: string;
+    scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null;
+    actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null;
+    currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; liveError: string | null;
+    position: number | null; cancelled: boolean; stale: boolean; raceColor: string | null;
+  }>;
+  lastUpdatedAt: string | null;
+  stale: boolean;
+};
+
 async function request<T>(path: string, init: RequestInit = {}, adminToken?: string): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -119,11 +134,12 @@ async function request<T>(path: string, init: RequestInit = {}, adminToken?: str
 
 export const api = {
   checkAdmin: (token: string) => request<{ ok: true }>("/api/admin/auth/check", {}, token),
+  getAdminDashboard: (gameId: string, token: string) => request<AdminDashboard>(`/api/admin/games/${encodeURIComponent(gameId)}/dashboard`, {}, token),
 
   searchStations: (text: string, token: string) =>
     request<Station[]>(`/api/admin/stations/search?text=${encodeURIComponent(text)}`, {}, token),
 
-  createGame: (body: { name?: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; stopIds: string[] }, token: string) =>
+  createGame: (body: { name?: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; gameEndTime: string; stopIds: string[] }, token: string) =>
     request<{ game: Game; skippedDisruptions?: SkippedDisruption[] }>("/api/admin/games", { method: "POST", body: JSON.stringify(body) }, token),
   applyDisruptions: (gameId: string, disruptionsJson: string, constructionJson: string, footballJson: string, token: string, preview = false) =>
     request<{ preview: boolean; mapEvents: MapEvent[]; skippedDisruptions: SkippedDisruption[]; appliedAt?: string }>(

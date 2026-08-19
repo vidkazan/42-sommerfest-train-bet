@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import type { Game, Journey, LiveEvent, MapEvent, SkippedDisruption, Station } from "../api/client";
+import type { AdminDashboard, Game, Journey, LiveEvent, MapEvent, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
 import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
@@ -25,17 +26,148 @@ export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentPar
 export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; final?: boolean };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; position?: number; trainId?: string; trainName?: string; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
-export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void };
+export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void; onDashboard: (game: Game) => void };
 export type AdminSetupViewProps = {
   stationQuery: string; stationResults: Station[]; selectedStations: Station[]; manualStationIds: string; stationLoading: boolean; stationError: string | null;
-  gameName: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string;
+  gameName: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; gameEndTime: string;
   loading: boolean; error: string | null;
   onStationQueryChange: (value: string) => void; onSearchStations: () => void; onToggleStation: (station: Station, selected: boolean) => void;
   onManualStationIdsChange: (value: string) => void; onGameNameChange: (value: string) => void; onEventDateChange: (value: string) => void;
-  onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onCreateGame: () => void;
+  onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onGameEndTimeChange: (value: string) => void; onCreateGame: () => void;
 };
 export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
+
+const racePalette = [
+  "color-mix(in srgb, var(--transport-u-blue) 72%, #000)",
+  "color-mix(in srgb, var(--transport-tram-red) 72%, #000)",
+  "color-mix(in srgb, #f97316 68%, #000)",
+  "color-mix(in srgb, var(--transport-taxi-yellow) 72%, #000)",
+  "color-mix(in srgb, var(--chew-fill-green-secondary) 78%, #000)",
+  "color-mix(in srgb, var(--transport-bus-magenta) 72%, #000)",
+  "color-mix(in srgb, #8b5cf6 68%, #000)",
+  "color-mix(in srgb, var(--transport-ship-cyan) 68%, #000)",
+  "color-mix(in srgb, var(--transport-s-green) 72%, #000)",
+  "color-mix(in srgb, var(--chew-fill-red-primary) 72%, #000)",
+  "color-mix(in srgb, #0891b2 68%, #000)",
+  "color-mix(in srgb, #c026d3 68%, #000)",
+  "color-mix(in srgb, #65a30d 68%, #000)",
+  "color-mix(in srgb, #db2777 68%, #000)",
+  "color-mix(in srgb, #4f46e5 68%, #000)",
+  "color-mix(in srgb, #ea580c 68%, #000)",
+  "color-mix(in srgb, #0e7490 72%, #000)",
+  "color-mix(in srgb, #a21caf 68%, #000)",
+  "color-mix(in srgb, #15803d 68%, #000)",
+  "color-mix(in srgb, #6b7280 72%, #000)",
+  "color-mix(in srgb, #be123c 68%, #000)",
+  "color-mix(in srgb, #4338ca 68%, #000)",
+  "color-mix(in srgb, #0f766e 68%, #000)",
+  "color-mix(in srgb, #7c3aed 68%, #000)",
+];
+
+function fallbackRaceColor(trainId: string) {
+  let hash = 0;
+  for (const character of trainId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return racePalette[hash % racePalette.length] ?? `hsl(${hash % 360} 65% 34%)`;
+}
+
+function buildRaceColorMap(entries: AdminDashboard["entries"]) {
+  const colorsByTrain = new Map<string, string>();
+  const used = new Set<string>();
+  const stableEntries = [...entries].sort((left, right) => left.trainId.localeCompare(right.trainId));
+  for (const entry of stableEntries) {
+    const persisted = entry.raceColor?.toUpperCase();
+    if (persisted && racePalette.includes(persisted) && !used.has(persisted)) {
+      colorsByTrain.set(entry.trainId, persisted);
+      used.add(persisted);
+      continue;
+    }
+    let hash = 0;
+    for (const character of entry.trainId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    let assigned: string | undefined;
+    for (let offset = 0; offset < racePalette.length; offset += 1) {
+      const candidate = racePalette[(hash + offset) % racePalette.length];
+      if (!used.has(candidate)) { assigned = candidate; break; }
+    }
+    if (!assigned) {
+      let variant = 0;
+      do {
+        assigned = `hsl(${(hash + variant * 137.5) % 360} 65% 34%)`;
+        variant += 1;
+      } while (used.has(assigned));
+    }
+    colorsByTrain.set(entry.trainId, assigned);
+    used.add(assigned);
+  }
+  return colorsByTrain;
+}
+
+export function CountdownBadge({ target }: { target?: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const targetTime = target ? Date.parse(target) : NaN;
+  if (!Number.isFinite(targetTime)) return <StatusBadge variant="muted">End time unavailable</StatusBadge>;
+  const remaining = Math.max(0, targetTime - now);
+  if (remaining === 0) return null;
+  const totalSeconds = Math.floor(remaining / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const value = hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return <Badge variant="blue" className="admin-dashboard__countdown">Ends in {value}</Badge>;
+}
+
+export function AdminDashboardView({ dashboard }: { dashboard: AdminDashboard }) {
+  const stateLabel = dashboard.state === "live" ? "Race in progress" : dashboard.state === "finished" ? "Race finished" : "Waiting for the race";
+  const finished = dashboard.state === "finished";
+  const sortedEntries = [...dashboard.entries].sort((left, right) => {
+    const leftCancelled = left.cancelled || left.status === "cancelled";
+    const rightCancelled = right.cancelled || right.status === "cancelled";
+    if (leftCancelled !== rightCancelled) return Number(leftCancelled) - Number(rightCancelled);
+    const leftDelay = finished ? left.finalDelayMinutes : left.raceDelayMinutes;
+    const rightDelay = finished ? right.finalDelayMinutes : right.raceDelayMinutes;
+    if (leftDelay === null && rightDelay !== null) return 1;
+    if (leftDelay !== null && rightDelay === null) return -1;
+    return (rightDelay ?? -Infinity) - (leftDelay ?? -Infinity);
+  });
+  const maxDelay = Math.max(0, ...sortedEntries.map((entry) => Math.max(0, (finished ? entry.finalDelayMinutes : entry.raceDelayMinutes) ?? 0)));
+  const colorsByTrain = buildRaceColorMap(dashboard.entries);
+  const initialAxisMax = Math.max(10, Math.ceil((maxDelay + 1) / 5) * 5);
+  const [axisMax, setAxisMax] = useState(initialAxisMax);
+  useEffect(() => {
+    if (maxDelay >= axisMax) setAxisMax(Math.max(10, Math.ceil((maxDelay + 5) / 5) * 5));
+  }, [axisMax, maxDelay]);
+  const axisTicks = Array.from({ length: Math.floor(axisMax / 5) + 1 }, (_, index) => index * 5);
+  return <section className="admin-dashboard" aria-label="Race dashboard">
+    <header className="admin-dashboard__header">
+      <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
+      <div className="admin-dashboard__header-status"><CountdownBadge target={dashboard.game?.gameEndTime} /><StatusBadge variant={dashboard.state === "finished" ? "muted" : dashboard.state === "live" ? "success" : "info"}>{stateLabel}</StatusBadge></div>
+    </header>
+    <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
+    {sortedEntries.length === 0 ? <p className="admin-dashboard__empty">Waiting for selected trains to start reporting.</p> : <>
+      <div className="admin-race-axis" aria-hidden="true"><span className="admin-race-axis__spacer" /><div className="admin-race-axis__ticks">{axisTicks.map((tick) => <span key={tick} style={{ left: `${(tick / axisMax) * 100}%` }}>{tick === axisMax ? `${tick}+` : tick}</span>)}</div></div>
+      <div className="admin-race-stage" style={{ "--race-row-count": sortedEntries.length } as CSSProperties}>
+        {sortedEntries.map((entry, index) => {
+          const delay = finished ? entry.finalDelayMinutes : entry.raceDelayMinutes;
+          const positiveDelay = Math.max(0, delay ?? 0);
+          const progress = Math.min(100, (positiveDelay / axisMax) * 100);
+          const color = colorsByTrain.get(entry.trainId) ?? fallbackRaceColor(entry.trainId);
+          const cancelled = entry.cancelled || entry.status === "cancelled";
+          const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}`;
+          const status = cancelled ? "Cancelled" : entry.status === "arrived" ? "Arrived" : entry.status === "in_progress" ? "In transit" : entry.stale ? "Live data stale" : "Waiting for departure";
+          return <article className={`admin-race-row ${index === 0 && !cancelled ? "admin-race-row--leader" : ""}`} key={entry.trainId} style={{ transform: `translateY(calc(${index} * var(--race-row-height)))` }}>
+            <div className="admin-race-row__identity"><span className="admin-race-row__rank">{medal}</span><Badge variant="clear" className={`admin-race-row__train-badge ${cancelled ? "is-cancelled" : ""}`} style={{ background: cancelled ? "var(--ds-border)" : color }}>{entry.displayName}</Badge></div>
+            <div className="admin-race-row__track"><span className="admin-race-row__bar" style={{ background: cancelled ? "var(--ds-border)" : color, width: `${progress}%` }} /><span className="admin-race-row__marker" style={{ background: cancelled ? "var(--ds-border)" : color, left: `${progress}%` }} /><Badge variant="clear" className="admin-race-row__value" style={{ background: "transparent", color: cancelled ? "var(--ds-text-muted)" : color }}>{cancelled ? "OUT" : delay === null ? "—" : `${delay >= 0 ? "+" : "−"}${Math.abs(delay)} min`}</Badge></div>
+            <span className="admin-race-row__status">{status}</span>
+          </article>;
+        })}
+      </div>
+    </>}
+  </section>;
+}
 
 type RaceState = "OUT OF THE RACE";
 
@@ -263,7 +395,7 @@ export function AdminAccessView({ value, loading, error, onChange, onSubmit }: A
   </form>;
 }
 
-export function AdminGameListView({ games, onDelete }: AdminGameListViewProps) {
+export function AdminGameListView({ games, onDelete, onDashboard }: AdminGameListViewProps) {
   return <>
     <h2>Games</h2>
     {games.length === 0 ? <p>No games created yet.</p> : <div className="journey-list">
@@ -271,14 +403,14 @@ export function AdminGameListView({ games, onDelete }: AdminGameListViewProps) {
         <strong>{game.name}</strong>
         <span>{game.eventDate} · {game.status}</span>
         <span>{game.bettingStart ? `${new Date(game.bettingStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${game.bettingEnd ? new Date(game.bettingEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : ""}</span>
-        <a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a>
+        <div className="admin-game-actions"><a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a>{(game.status === "active" || game.status === "finished") && <Button type="button" variant="secondary" onClick={() => onDashboard(game)}>Dashboard</Button>}</div>
         <Button type="button" variant="secondary" onClick={() => onDelete(game)}>Delete game</Button>
       </article>)}
     </div>}
   </>;
 }
 
-export function AdminSetupView({ stationQuery, stationResults, selectedStations, manualStationIds, stationLoading, stationError, gameName, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, loading, error, onStationQueryChange, onSearchStations, onToggleStation, onManualStationIdsChange, onGameNameChange, onEventDateChange, onBettingStartChange, onBettingEndChange, onJourneyStartChange, onJourneyEndChange, onCreateGame }: AdminSetupViewProps) {
+export function AdminSetupView({ stationQuery, stationResults, selectedStations, manualStationIds, stationLoading, stationError, gameName, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, gameEndTime, loading, error, onStationQueryChange, onSearchStations, onToggleStation, onManualStationIdsChange, onGameNameChange, onEventDateChange, onBettingStartChange, onBettingEndChange, onJourneyStartChange, onJourneyEndChange, onGameEndTimeChange, onCreateGame }: AdminSetupViewProps) {
   const manualIdsChanged = (value: string) => onManualStationIdsChange(value);
   return <>
     <hr />
@@ -306,6 +438,7 @@ export function AdminSetupView({ stationQuery, stationResults, selectedStations,
       <label className="field-label" htmlFor="betting-end">Betting closes</label><input id="betting-end" type="time" value={bettingEnd} onChange={(event) => onBettingEndChange(event.target.value)} required />
       <label className="field-label" htmlFor="journey-start">Journey departures from</label><input id="journey-start" type="time" value={journeyDepartureStart} onChange={(event) => onJourneyStartChange(event.target.value)} required />
       <label className="field-label" htmlFor="journey-end">Journey departures until</label><input id="journey-end" type="time" value={journeyDepartureEnd} onChange={(event) => onJourneyEndChange(event.target.value)} required />
+      <label className="field-label" htmlFor="game-end-time">Game end time</label><input id="game-end-time" type="time" value={gameEndTime} onChange={(event) => onGameEndTimeChange(event.target.value)} required /><p className="field-help">When the last selected train is expected to arrive.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <Button type="submit" disabled={loading || (selectedStations.length === 0 && !manualStationIds.trim())}>{loading ? "Creating…" : "Create draft game"}</Button>
     </form>

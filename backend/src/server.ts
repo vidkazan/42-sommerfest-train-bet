@@ -87,6 +87,7 @@ db.exec(`
     betting_end TEXT NOT NULL DEFAULT '18:00',
     journey_departure_start TEXT NOT NULL DEFAULT '17:00',
     journey_departure_end TEXT NOT NULL DEFAULT '17:30',
+    game_end_time TEXT,
     stop_ids_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'open', 'closed', 'finished')),
     created_at TEXT NOT NULL,
@@ -120,6 +121,7 @@ db.exec(`
     departure_delay_minutes INTEGER,
     race_delay_minutes INTEGER,
     final_delay_minutes INTEGER,
+    race_color TEXT,
     delay_gain_band TEXT NOT NULL DEFAULT 'none',
     live_status TEXT NOT NULL DEFAULT 'waiting',
     last_live_update TEXT,
@@ -236,6 +238,7 @@ if (!columns("bets").has("game_id")) {
 if (!columns("games").has("stop_ids_json")) {
   db.exec("ALTER TABLE games ADD COLUMN stop_ids_json TEXT NOT NULL DEFAULT '[]'");
 }
+if (!columns("games").has("game_end_time")) db.exec("ALTER TABLE games ADD COLUMN game_end_time TEXT");
 if (!columns("game_journeys").has("actual_arrival")) db.exec("ALTER TABLE game_journeys ADD COLUMN actual_arrival TEXT");
 if (!columns("game_journeys").has("delay_seconds")) db.exec("ALTER TABLE game_journeys ADD COLUMN delay_seconds INTEGER");
 if (!columns("game_journeys").has("stop_count")) db.exec("ALTER TABLE game_journeys ADD COLUMN stop_count INTEGER");
@@ -245,12 +248,36 @@ if (!columns("game_journeys").has("current_delay_minutes")) db.exec("ALTER TABLE
 if (!columns("game_journeys").has("departure_delay_minutes")) db.exec("ALTER TABLE game_journeys ADD COLUMN departure_delay_minutes INTEGER");
 if (!columns("game_journeys").has("race_delay_minutes")) db.exec("ALTER TABLE game_journeys ADD COLUMN race_delay_minutes INTEGER");
 if (!columns("game_journeys").has("final_delay_minutes")) db.exec("ALTER TABLE game_journeys ADD COLUMN final_delay_minutes INTEGER");
+if (!columns("game_journeys").has("race_color")) db.exec("ALTER TABLE game_journeys ADD COLUMN race_color TEXT");
 if (!columns("game_journeys").has("live_status")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_status TEXT NOT NULL DEFAULT 'waiting'");
 if (!columns("game_journeys").has("last_live_update")) db.exec("ALTER TABLE game_journeys ADD COLUMN last_live_update TEXT");
 if (!columns("game_journeys").has("live_error")) db.exec("ALTER TABLE game_journeys ADD COLUMN live_error TEXT");
 if (!columns("game_journeys").has("line_name")) db.exec("ALTER TABLE game_journeys ADD COLUMN line_name TEXT");
 if (!columns("game_journeys").has("train_number")) db.exec("ALTER TABLE game_journeys ADD COLUMN train_number TEXT");
 if (!columns("game_journeys").has("history_json")) db.exec("ALTER TABLE game_journeys ADD COLUMN history_json TEXT");
+  const persistedRacePalette = ["#347DE0", "#F75056", "#F97316", "#FFBB00", "#0F9663", "#E664E6", "#8B5CF6", "#30D1B9", "#408335", "#DD2222", "#0891B2", "#C026D3", "#65A30D", "#DB2777", "#4F46E5", "#EA580C", "#0E7490", "#A21CAF", "#15803D", "#6B7280", "#BE123C", "#4338CA", "#0F766E", "#7C3AED"];
+const missingRaceColors = db.prepare("SELECT id, game_id AS gameId, external_trip_id AS externalTripId FROM game_journeys WHERE race_color IS NULL ORDER BY game_id, created_at, id").all() as Array<{ id: string; gameId: string; externalTripId: string }>;
+const existingRaceColors = db.prepare("SELECT game_id AS gameId, race_color AS raceColor FROM game_journeys WHERE race_color IS NOT NULL").all() as Array<{ gameId: string; raceColor: string }>;
+const usedRaceColorsByGame = new Map<string, Set<string>>();
+for (const row of existingRaceColors) {
+  const colorsForGame = usedRaceColorsByGame.get(row.gameId) ?? new Set<string>();
+  colorsForGame.add(row.raceColor);
+  usedRaceColorsByGame.set(row.gameId, colorsForGame);
+}
+const backfillRaceColor = db.prepare("UPDATE game_journeys SET race_color = ? WHERE id = ?");
+for (const row of missingRaceColors) {
+  const used = usedRaceColorsByGame.get(row.gameId) ?? new Set<string>();
+  const paletteColor = persistedRacePalette.find((color) => !used.has(color));
+  let color = paletteColor;
+  if (!color) {
+    let hash = 0;
+    for (const character of row.externalTripId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    color = `hsl(${hash % 360} 72% 48%)`;
+  }
+  used.add(color);
+  usedRaceColorsByGame.set(row.gameId, used);
+  backfillRaceColor.run(color, row.id);
+}
 db.exec("CREATE INDEX IF NOT EXISTS idx_participants_game_id ON participants(game_id)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_bets_game_id ON bets(game_id)");
 db.exec(`UPDATE participants SET game_id = (SELECT id FROM games WHERE status = 'active' LIMIT 1) WHERE game_id IS NULL`);
@@ -317,13 +344,26 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
     }
     historyByTripId.set(row.externalTripId, await historyDataSource.getLineHistory(row.lineName, row.trainNumber));
   }));
+  const previousColors = new Map((db.prepare("SELECT external_trip_id AS externalTripId, race_color AS raceColor FROM game_journeys WHERE game_id = ? AND race_color IS NOT NULL").all(gameId) as Array<{ externalTripId: string; raceColor: string }>).map((row) => [row.externalTripId, row.raceColor]));
+  const raceColors = ["#347DE0", "#F75056", "#F97316", "#FFBB00", "#0F9663", "#E664E6", "#8B5CF6", "#30D1B9", "#408335", "#DD2222", "#0891B2", "#C026D3", "#65A30D", "#DB2777", "#4F46E5", "#EA580C", "#0E7490", "#A21CAF", "#15803D", "#6B7280", "#BE123C", "#4338CA", "#0F766E", "#7C3AED"];
+  const usedColors = new Set(previousColors.values());
+  const colorForRow = (externalTripId: string) => {
+    const previous = previousColors.get(externalTripId);
+    if (previous) return previous;
+    const available = raceColors.find((color) => !usedColors.has(color));
+    if (available) { usedColors.add(available); return available; }
+    let hash = 0;
+    for (const character of externalTripId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    const hue = hash % 360;
+    return `hsl(${hue} 72% 48%)`;
+  };
   const insert = db.prepare(`
     INSERT OR REPLACE INTO game_journeys (
       id, game_id, external_trip_id, display_name, origin, destination,
       line_name, train_number, history_json,
       scheduled_departure, scheduled_arrival, duration_seconds, origin_stop_id,
-      stop_count, realtime, status, included, exclusion_reason, route_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      stop_count, realtime, status, included, exclusion_reason, route_json, race_color, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
   `);
   const save = db.transaction(() => {
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(gameId);
@@ -331,7 +371,7 @@ const fetchGameJourneys = async (gameId: string, stopIds: string[], startTime: s
       insert.run(
         crypto.randomUUID(), gameId, row.externalTripId, row.displayName, row.origin,
         row.destination, row.lineName, row.trainNumber, historyByTripId.has(row.externalTripId) ? JSON.stringify(historyByTripId.get(row.externalTripId)) : null, row.scheduledDeparture, row.scheduledArrival, row.durationSeconds,
-        row.originStopId, row.stopCount, row.realtime ? 1 : 0, row.status, row.exclusionReason, row.routeJson, fetchedAt,
+        row.originStopId, row.stopCount, row.realtime ? 1 : 0, row.status, row.exclusionReason, row.routeJson, colorForRow(row.externalTripId), fetchedAt,
       );
     }
     db.prepare("UPDATE games SET updated_at = ? WHERE id = ?").run(fetchedAt, gameId);
@@ -374,6 +414,7 @@ app.get("/api/admin/games", async (request, reply) => {
       betting_start AS bettingStart, betting_end AS bettingEnd,
       journey_departure_start AS journeyDepartureStart,
       journey_departure_end AS journeyDepartureEnd,
+      game_end_time AS gameEndTime,
       status, created_at AS createdAt, updated_at AS updatedAt,
       activated_at AS activatedAt
     FROM games ORDER BY created_at DESC
@@ -410,6 +451,7 @@ app.post<{
     bettingEnd?: string;
     journeyDepartureStart?: string;
     journeyDepartureEnd?: string;
+    gameEndTime?: string;
     stopIds?: string[];
   };
 }>("/api/admin/games", async (request, reply) => {
@@ -422,18 +464,19 @@ app.post<{
   const bettingEnd = body.bettingEnd?.trim() || `${eventDate}T18:00:00+02:00`;
   const journeyDepartureStart = body.journeyDepartureStart?.trim() || `${eventDate}T17:00:00+02:00`;
   const journeyDepartureEnd = body.journeyDepartureEnd?.trim() || `${eventDate}T17:30:00+02:00`;
+  const gameEndTime = body.gameEndTime?.trim() || `${eventDate}T23:00:00+02:00`;
   const stopIds = [...new Set((body.stopIds ?? []).map((id) => id.trim()).filter(Boolean))];
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return reply.code(400).send({ error: "INVALID_EVENT_DATE" });
   }
-  const timestamps = [bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd].map((value) => new Date(value).getTime());
-  const timesOnEventDate = [bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd]
+  const timestamps = [bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, gameEndTime].map((value) => new Date(value).getTime());
+  const timesOnEventDate = [bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, gameEndTime]
     .every((value) => value.startsWith(`${eventDate}T`));
   if (timestamps.some((value) => !Number.isFinite(value)) || !timesOnEventDate) {
     return reply.code(400).send({ error: "INVALID_TIME_RANGE" });
   }
-  if (timestamps[0] >= timestamps[1] || timestamps[2] >= timestamps[3]) {
+  if (timestamps[0] >= timestamps[1] || timestamps[2] >= timestamps[3] || timestamps[4] <= timestamps[3]) {
     return reply.code(400).send({ error: "INVALID_TIME_RANGE" });
   }
   if (stopIds.length === 0) {
@@ -447,8 +490,8 @@ app.post<{
       INSERT INTO games (
         id, name, event_date, timezone, betting_start, betting_end,
         journey_departure_start, journey_departure_end, stop_ids_json,
-        status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+        game_end_time, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
     `).run(
       gameId,
       name,
@@ -459,6 +502,7 @@ app.post<{
       journeyDepartureStart,
       journeyDepartureEnd,
       JSON.stringify(stopIds),
+      gameEndTime,
       now,
       now,
     );
@@ -470,7 +514,7 @@ app.post<{
       crypto.randomUUID(),
       gameId,
       "game_created",
-      JSON.stringify({ name, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, stopIds }),
+      JSON.stringify({ name, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, gameEndTime, stopIds }),
       now,
     );
   });
@@ -486,6 +530,7 @@ app.post<{
       bettingEnd,
       journeyDepartureStart,
       journeyDepartureEnd,
+      gameEndTime,
       status: "draft",
       stopIds,
       createdAt: now,
@@ -559,6 +604,7 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/fetch-journeys", asyn
     status: string;
     journey_departure_start: string;
     journey_departure_end: string;
+    game_end_time: string | null;
     stop_ids_json: string;
   } | undefined;
 
@@ -586,7 +632,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
 
   const game = db.prepare(`
     SELECT id, name, event_date, timezone, betting_start, betting_end,
-      journey_departure_start, journey_departure_end, stop_ids_json,
+      journey_departure_start, journey_departure_end, game_end_time, stop_ids_json,
       status, created_at, updated_at, activated_at
     FROM games WHERE id = ?
   `).get(request.params.id) as {
@@ -598,6 +644,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
     betting_end: string;
     journey_departure_start: string;
     journey_departure_end: string;
+    game_end_time: string | null;
     stop_ids_json: string;
     status: string;
     created_at: string;
@@ -644,6 +691,7 @@ app.get<{ Params: { id: string } }>("/api/admin/games/:id", async (request, repl
       bettingEnd: game.betting_end,
       journeyDepartureStart: game.journey_departure_start,
       journeyDepartureEnd: game.journey_departure_end,
+      gameEndTime: game.game_end_time ?? `${game.event_date}T23:00:00+02:00`,
       stopIds: JSON.parse(game.stop_ids_json),
       status: game.status,
       createdAt: game.created_at,
@@ -745,21 +793,79 @@ type GameRow = {
   timezone: string;
   betting_start: string;
   betting_end: string;
+  game_end_time: string | null;
   status: string;
 };
 
 const getGameById = (id: string) => db.prepare(`
-  SELECT id, name, event_date, timezone, betting_start, betting_end, status
+  SELECT id, name, event_date, timezone, betting_start, betting_end, game_end_time, status
   FROM games WHERE id = ?
 `).get(id) as {
   id: string; name: string; event_date: string; timezone: string;
-  betting_start: string; betting_end: string; status: string;
+  betting_start: string; betting_end: string; game_end_time: string | null; status: string;
 } | undefined;
 
 const getPublicGame = (id: string) => {
   const game = getGameById(id);
   return game && game.status !== "draft" ? game : undefined;
 };
+
+const getAdminDashboardSnapshot = (gameId?: string) => {
+  const game = db.prepare(`
+    SELECT id, name, event_date AS eventDate, timezone, status,
+      COALESCE(game_end_time, journey_departure_end) AS gameEndTime,
+      betting_start AS bettingStart, betting_end AS bettingEnd
+    FROM games
+    WHERE ${gameId ? "id = ?" : "status IN ('active', 'finished')"}
+      AND status IN ('active', 'finished')
+    ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC LIMIT 1
+  `).get(...(gameId ? [gameId] : [])) as { id: string; name: string; eventDate: string; timezone: string; status: string; gameEndTime: string; bettingStart: string; bettingEnd: string } | undefined;
+  if (!game) return { state: "no_active_game" as const, game: null, entries: [], lastUpdatedAt: null, stale: false };
+
+  const rows = db.prepare(`
+    SELECT id AS trainId, display_name AS displayName, origin, destination,
+      scheduled_departure AS scheduledDeparture, scheduled_arrival AS scheduledArrival,
+      duration_seconds AS durationSeconds, stop_count AS stopCount,
+      actual_arrival AS actualArrival, race_delay_minutes AS raceDelayMinutes,
+      final_delay_minutes AS finalDelayMinutes, current_delay_minutes AS currentDelayMinutes,
+      departure_delay_minutes AS departureDelayMinutes, live_status AS status,
+      live_error AS liveError, race_color AS raceColor
+    FROM game_journeys
+    WHERE game_id = ? AND included = 1
+    ORDER BY scheduled_departure ASC
+  `).all(game.id) as Array<{ trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; liveError: string | null; raceColor: string | null }>;
+  const valid = (entry: typeof rows[number]) => entry.status !== "cancelled" && entry.status !== "waiting_for_departure" && entry.raceDelayMinutes !== null;
+  rows.sort((left, right) => {
+    const leftValid = valid(left); const rightValid = valid(right);
+    if (leftValid !== rightValid) return Number(rightValid) - Number(leftValid);
+    if (!leftValid || !rightValid) return left.scheduledDeparture.localeCompare(right.scheduledDeparture);
+    return (right.raceDelayMinutes as number) - (left.raceDelayMinutes as number);
+  });
+  let position = 0;
+  let previousDelay: number | null = null;
+  const entries = rows.map((entry, index) => {
+    if (valid(entry) && entry.raceDelayMinutes !== previousDelay) position = index + 1;
+    previousDelay = entry.raceDelayMinutes;
+    return { ...entry, position: valid(entry) ? position : null, cancelled: entry.status === "cancelled", stale: entry.status === "stale" };
+  });
+  const state = entries.length > 0 && entries.every((entry) => entry.status === "arrived" || entry.status === "cancelled")
+    ? "finished" as const
+    : entries.some((entry) => entry.status === "in_progress" || entry.status === "arrived") ? "live" as const : "waiting" as const;
+  const lastUpdatedAt = db.prepare("SELECT MAX(last_live_update) AS value FROM game_journeys WHERE game_id = ?").get(game.id) as { value: string | null };
+  return { state, game, entries, lastUpdatedAt: lastUpdatedAt.value, stale: entries.some((entry) => entry.stale) };
+};
+
+app.get<{ Params: { id: string } }>("/api/admin/games/:id/dashboard", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  const dashboard = getAdminDashboardSnapshot(request.params.id);
+  if (!dashboard.game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
+  return dashboard;
+});
+
+app.get("/api/admin/dashboard", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  return getAdminDashboardSnapshot();
+});
 
 const getMapEvents = (gameId: string): MapEvent[] => db.prepare(`
   SELECT id, category, title, description, latitude, longitude,
@@ -770,7 +876,7 @@ const getMapEvents = (gameId: string): MapEvent[] => db.prepare(`
 app.get<{ Params: { id: string } }>("/api/games/:id", async (request, reply) => {
   const game = getPublicGame(request.params.id);
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
-  return { game: { id: game.id, name: game.name, eventDate: game.event_date, timezone: game.timezone, bettingStart: game.betting_start, bettingEnd: game.betting_end, status: game.status, mapEvents: getMapEvents(game.id) } };
+  return { game: { id: game.id, name: game.name, eventDate: game.event_date, timezone: game.timezone, bettingStart: game.betting_start, bettingEnd: game.betting_end, gameEndTime: game.game_end_time ?? `${game.event_date}T23:00:00+02:00`, status: game.status, mapEvents: getMapEvents(game.id) } };
 });
 
 app.get<{ Querystring: { gameId?: string } }>("/api/trains", async (request, reply) => {

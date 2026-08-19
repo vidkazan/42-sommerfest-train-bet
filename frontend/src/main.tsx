@@ -1,13 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
-import { api, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, RaceChartView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { api, type AdminDashboard, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
+import { AdminAccessView, AdminActiveView, AdminDashboardView, AdminGameListView, AdminReviewView, AdminSetupView, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, RaceChartView, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
 type AppMode = "public" | "admin" | "not-found";
-type AdminView = "access" | "create" | "review" | "active";
+type AdminView = "access" | "create" | "review" | "active" | "dashboard";
 
 function App() {
   const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -33,6 +33,7 @@ function App() {
   const [bettingEnd, setBettingEnd] = useState("18:00");
   const [journeyDepartureStart, setJourneyDepartureStart] = useState("17:00");
   const [journeyDepartureEnd, setJourneyDepartureEnd] = useState("17:30");
+  const [gameEndTime, setGameEndTime] = useState("23:00");
   const [disruptionsJson, setDisruptionsJson] = useState("");
   const [constructionJson, setConstructionJson] = useState("");
   const [footballJson, setFootballJson] = useState("");
@@ -42,6 +43,7 @@ function App() {
   const [journeys, setJourneys] = useState<Journey[]>([]);
   const [adminGame, setAdminGame] = useState<Game | null>(null);
   const [adminGames, setAdminGames] = useState<Game[]>([]);
+  const [adminDashboard, setAdminDashboard] = useState<AdminDashboard | null>(null);
   const [selectedJourneyIds, setSelectedJourneyIds] = useState<string[]>([]);
   const [minimumJourneyDuration, setMinimumJourneyDuration] = useState("0");
   const [whitelistSaved, setWhitelistSaved] = useState(false);
@@ -149,6 +151,35 @@ function App() {
   }, [adminToken]);
 
   useEffect(() => {
+    if (!adminToken || adminView !== "dashboard") return;
+    let active = true;
+    const refreshDashboard = async () => {
+      try {
+        if (!adminDashboard?.game?.id) return;
+        const next = await api.getAdminDashboard(adminDashboard.game.id, adminToken);
+        if (active) setAdminDashboard(next);
+      } catch { /* keep the last dashboard snapshot visible */ }
+    };
+    const timer = window.setInterval(refreshDashboard, 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [adminDashboard?.game?.id, adminToken, adminView]);
+
+  const openAdminDashboard = async (gameToShow: Game) => {
+    if (!adminToken) return;
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const dashboard = await api.getAdminDashboard(gameToShow.id, adminToken);
+      setAdminDashboard(dashboard);
+      setAdminView("dashboard");
+    } catch (reason: unknown) {
+      setAdminError(reason instanceof Error ? reason.message : "Could not load dashboard");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (mode !== "public" || !betSubmitted) return;
     let active = true;
     const loadResults = async () => {
@@ -205,8 +236,9 @@ function App() {
     setAdminError(null);
     setAdminLoading(true);
     try {
-      await api.checkAdmin(adminInput);
-      setAdminToken(adminInput);
+      const token = adminInput;
+      await api.checkAdmin(token);
+      setAdminToken(token);
       setAdminInput("");
       setAdminView("create");
     } catch (reason: unknown) {
@@ -252,7 +284,7 @@ function App() {
     setAdminLoading(true);
     setAdminError(null);
     try {
-      const result = await api.createGame({ name: gameName.trim() || "ChooChoo Delay Race", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, stopIds }, adminToken);
+      const result = await api.createGame({ name: gameName.trim() || "ChooChoo Delay Race", eventDate, bettingStart: `${eventDate}T${bettingStart}:00+02:00`, bettingEnd: `${eventDate}T${bettingEnd}:00+02:00`, journeyDepartureStart: `${eventDate}T${journeyDepartureStart}:00+02:00`, journeyDepartureEnd: `${eventDate}T${journeyDepartureEnd}:00+02:00`, gameEndTime: `${eventDate}T${gameEndTime}:00+02:00`, stopIds }, adminToken);
       setAdminGame(result.game);
       setSkippedDisruptions([]);
       setDisruptionMessage(null);
@@ -327,7 +359,9 @@ function App() {
     try {
       const result = await api.confirmGame(adminGame.id, adminToken);
       setAdminGame((current) => current ? { ...current, status: result.status } : current);
-      setAdminView("active");
+      const dashboard = await api.getAdminDashboard(adminGame.id, adminToken);
+      setAdminDashboard(dashboard);
+      setAdminView("dashboard");
     } catch (reason: unknown) {
       setAdminError(reason instanceof Error ? reason.message : "Could not activate game");
     } finally {
@@ -340,6 +374,9 @@ function App() {
   }
 
   if (mode === "admin") {
+    if (adminView === "dashboard" && adminDashboard) {
+      return <main className="admin-dashboard-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><AdminDashboardView key={adminDashboard.game?.id ?? "dashboard"} dashboard={adminDashboard} /></main>;
+    }
     return (
       <main className="app-shell">
         <BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} />
@@ -352,8 +389,8 @@ function App() {
           {adminView === "access" && <AdminAccessView value={adminInput} loading={adminLoading} error={adminError} onChange={setAdminInput} onSubmit={submitAdminAccess} />}
           {adminView === "create" && (
             <>
-              <AdminGameListView games={adminGames} onDelete={deleteAdminGame} />
-              <AdminSetupView stationQuery={stationQuery} stationResults={stationResults} selectedStations={selectedStations} manualStationIds={manualStationIds} stationLoading={stationLoading} stationError={stationError} gameName={gameName} eventDate={eventDate} bettingStart={bettingStart} bettingEnd={bettingEnd} journeyDepartureStart={journeyDepartureStart} journeyDepartureEnd={journeyDepartureEnd} loading={adminLoading} error={adminError} onStationQueryChange={setStationQuery} onSearchStations={searchStations} onToggleStation={updateStationSelection} onManualStationIdsChange={updateManualStationIds} onGameNameChange={setGameName} onEventDateChange={setEventDate} onBettingStartChange={setBettingStart} onBettingEndChange={setBettingEnd} onJourneyStartChange={setJourneyDepartureStart} onJourneyEndChange={setJourneyDepartureEnd} onCreateGame={createDraftGame} />
+              <AdminGameListView games={adminGames} onDelete={deleteAdminGame} onDashboard={openAdminDashboard} />
+              <AdminSetupView stationQuery={stationQuery} stationResults={stationResults} selectedStations={selectedStations} manualStationIds={manualStationIds} stationLoading={stationLoading} stationError={stationError} gameName={gameName} eventDate={eventDate} bettingStart={bettingStart} bettingEnd={bettingEnd} journeyDepartureStart={journeyDepartureStart} journeyDepartureEnd={journeyDepartureEnd} gameEndTime={gameEndTime} loading={adminLoading} error={adminError} onStationQueryChange={setStationQuery} onSearchStations={searchStations} onToggleStation={updateStationSelection} onManualStationIdsChange={updateManualStationIds} onGameNameChange={setGameName} onEventDateChange={setEventDate} onBettingStartChange={setBettingStart} onBettingEndChange={setBettingEnd} onJourneyStartChange={setJourneyDepartureStart} onJourneyEndChange={setJourneyDepartureEnd} onGameEndTimeChange={setGameEndTime} onCreateGame={createDraftGame} />
             </>
           )}
           {adminView === "review" && adminGame && <AdminReviewView game={adminGame} journeys={journeys} minimumDuration={minimumJourneyDuration} selectedJourneyIds={selectedJourneyIds} disruptionsJson={disruptionsJson} constructionJson={constructionJson} footballJson={footballJson} skippedDisruptions={skippedDisruptions} disruptionMessage={disruptionMessage} loading={adminLoading} whitelistSaved={whitelistSaved} error={adminError} onDisruptionsJsonChange={setDisruptionsJson} onConstructionJsonChange={setConstructionJson} onFootballJsonChange={setFootballJson} onApplyDisruptions={applyDisruptions} onFetch={fetchAdminJourneys} onMinimumDurationChange={setMinimumJourneyDuration} onToggleJourney={toggleAdminJourney} onSave={saveAdminWhitelist} onActivate={activateAdminGame} />}

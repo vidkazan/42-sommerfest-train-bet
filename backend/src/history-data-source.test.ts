@@ -3,9 +3,31 @@ import { createHistoryDataSource } from "./history-data-source.js";
 
 const response = {
   line_number: "RE5",
-  train_type: "NX",
-  cancellation: { rate_percentage: 6.91 },
-  delay: { average_minutes: 10.7, minimum_minutes: -50, maximum_minutes: 176, delayed_percentage: 81.68 },
+  train_number_start: 28500,
+  train_number_end: 28600,
+  most_popular_start_station: "Köln Hbf",
+  most_popular_end_station: "Krefeld Hbf",
+  cancellation_rate_percentage: 6.91,
+  average_delay_minutes: 10.7,
+  maximum_delay_minutes: 176,
+  delay_rate_percentage: 81.68,
+  reliability_percentage: 42.5,
+  disaster_30_percentage: 8.2,
+  disaster_60_percentage: 1.4,
+  p50_delay_minutes: 4.1,
+  p90_delay_minutes: 28.6,
+  chaos_spread_minutes: 24.5,
+  delay_variance: 312.4,
+  comeback_percentage: 12.3,
+  snowball_percentage: 19.8,
+  recovery_speed_minutes_per_stop: 0.7,
+  monday_delay_rate: 80,
+  tuesday_delay_rate: 81,
+  wednesday_delay_rate: 82,
+  thursday_delay_rate: 83,
+  friday_delay_rate: 84,
+  saturday_delay_rate: 85,
+  sunday_delay_rate: 86,
   delay_distribution: [{ range_start: null, range_end: -2, percentage: 0.01 }],
   calculated_at: "2026-08-18T14:31:31.017Z",
 };
@@ -27,9 +49,33 @@ describe("history data source", () => {
 
     await expect(source.getLineHistory("RE5", "28501")).resolves.toEqual({
       lineNumber: "RE5",
-      trainType: "NX",
+      trainNumberStart: 28500,
+      trainNumberEnd: 28600,
+      mostPopularStartStation: "Köln Hbf",
+      mostPopularEndStation: "Krefeld Hbf",
+      cancellationRatePercentage: 6.91,
+      averageDelayMinutes: 10.7,
+      maximumDelayMinutes: 176,
+      delayRatePercentage: 81.68,
+      reliabilityPercentage: 42.5,
+      disaster30Percentage: 8.2,
+      disaster60Percentage: 1.4,
+      p50DelayMinutes: 4.1,
+      p90DelayMinutes: 28.6,
+      chaosSpreadMinutes: 24.5,
+      delayVariance: 312.4,
+      comebackPercentage: 12.3,
+      snowballPercentage: 19.8,
+      recoverySpeedMinutesPerStop: 0.7,
+      mondayDelayRate: 80,
+      tuesdayDelayRate: 81,
+      wednesdayDelayRate: 82,
+      thursdayDelayRate: 83,
+      fridayDelayRate: 84,
+      saturdayDelayRate: 85,
+      sundayDelayRate: 86,
       cancellation: { ratePercentage: 6.91 },
-      delay: { averageMinutes: 10.7, minimumMinutes: -50, maximumMinutes: 176, delayedPercentage: 81.68 },
+      delay: { averageMinutes: 10.7, minimumMinutes: null, maximumMinutes: 176, delayedPercentage: 81.68 },
       delayDistribution: [{ rangeStart: null, rangeEnd: -2, percentage: 0.01 }],
       calculatedAt: "2026-08-18T14:31:31.017Z",
     });
@@ -53,6 +99,20 @@ describe("history data source", () => {
     await expect(source.getLineHistory("RE5", "28501")).resolves.toBeNull();
     expect(calls).toBe(1);
     expect(logs).toEqual([expect.objectContaining({ statusCode: 404, outcome: "not_found" })]);
+  });
+
+  it("rejects responses without range identity", async () => {
+    const logs: unknown[] = [];
+    const source = createHistoryDataSource({
+      baseUrl: "http://history.example:8000",
+      timeoutMs: 1000,
+      cacheTtlSeconds: 300,
+      fetchImpl: async () => new Response(JSON.stringify({ ...response, train_number_start: undefined }), { status: 200 }),
+      logRequest: (event) => logs.push(event),
+    });
+
+    await expect(source.getLineHistory("RE5", "28501")).resolves.toBeNull();
+    expect(logs).toEqual([expect.objectContaining({ statusCode: 200, outcome: "invalid_response" })]);
   });
 
   it("does not throw when the history service fails", async () => {

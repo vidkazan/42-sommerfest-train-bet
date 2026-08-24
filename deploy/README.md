@@ -20,7 +20,7 @@ Install Nginx and Certbot on the host, point the `fcody.de` DNS `A` record to th
 
 The script starts the app, installs the project site in `/etc/nginx/sites-available/`, enables it through `/etc/nginx/sites-enabled/`, obtains the certificate, and reloads host Nginx with HTTPS enabled.
 
-The application containers listen only on localhost ports 5173 (frontend), 3001 (backend), and 3000 (Grafana). Host Nginx owns ports 80 and 443.
+The application containers listen only on localhost ports 5173 (frontend) and 3001 (backend). Host Nginx owns ports 80 and 443. Centralized analytics runs in the separate `fcody-analytics` project.
 
 ## Renewal
 
@@ -38,21 +38,6 @@ Example cron entry:
 
 The backend is also published on localhost port 3001 for direct debugging. The public frontend API is served at `/delayrace/api/`; Nginx strips `/delayrace` before forwarding to the backend's `/api/` routes.
 
-## Grafana logs over HTTPS
+## Centralized analytics
 
-Grafana is available at `https://fcody.de/grafana/` and requires login. Set the required admin credentials in `.env.prod`:
-
-```dotenv
-GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=replace-with-a-long-random-password
-```
-
-Rebuild and restart the production stack after changing the deployment configuration:
-
-```bash
-./scripts/prod-up.sh
-```
-
-The production helper starts the production stack with its required `.env.prod` configuration.
-
-Open `https://fcody.de/grafana/` and sign in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. Grafana is bound to localhost and exposed publicly only through host Nginx; Loki and Alloy remain internal to the Docker network.
+Grafana, Loki, and Alloy are deployed from the sibling `fcody-analytics` project. Grafana remains available at `https://fcody.de/grafana/`; see that project for analytics credentials, dashboards, retention, and log collection operations.

@@ -3,6 +3,8 @@ import { createHistoryDataSource } from "./history-data-source.js";
 
 const response = {
   line_number: "RE5",
+  line_game_name: "The Northern Connector",
+  line_game_description: "Reliable regional service between Hamburg and Hannover.",
   train_number_start: 28500,
   train_number_end: 28600,
   most_popular_start_station: "Köln Hbf",
@@ -49,6 +51,8 @@ describe("history data source", () => {
 
     await expect(source.getLineHistory("RE5", "28501")).resolves.toEqual({
       lineNumber: "RE5",
+      lineGameName: "The Northern Connector",
+      lineGameDescription: "Reliable regional service between Hamburg and Hannover.",
       trainNumberStart: 28500,
       trainNumberEnd: 28600,
       mostPopularStartStation: "Köln Hbf",

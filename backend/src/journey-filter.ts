@@ -23,6 +23,8 @@ const parseTrainIdentifiers = (displayName: string): { lineName: string | null; 
   return { lineName: match[1].replace(/\s+/g, "").toUpperCase(), trainNumber: match[2] };
 };
 
+const isRegionalService = (displayName: string): boolean => /^(?:RE|RB)\s*\d/i.test(displayName.trim());
+
 export function normalizeCandidate(stopTime: MotisStopTime, stopId: string, startTime: string, endTime: string): Candidate | null {
   const tripId = stopTime.tripId;
   const departure = stopTime.place?.scheduledDeparture;
@@ -36,7 +38,7 @@ export function normalizeCandidate(stopTime: MotisStopTime, stopId: string, star
   const startTimestamp = new Date(startTime).getTime();
   const endTimestamp = new Date(endTime).getTime();
   const exclusionReason = stopTime.mode !== "REGIONAL_RAIL" ? "NOT_REGIONAL_RAIL"
-    : !stopTime.displayName.toUpperCase().startsWith("RE") ? "NOT_RE"
+    : !isRegionalService(stopTime.displayName) ? "NOT_RE"
       : !stopTime.realTime ? "NO_REALTIME_DATA"
         : stopTime.cancelled || stopTime.tripCancelled ? "CANCELLED"
           : !Number.isFinite(departureTimestamp) || !Number.isFinite(arrivalTimestamp) ? "MISSING_SCHEDULE"

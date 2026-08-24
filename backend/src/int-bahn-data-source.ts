@@ -191,11 +191,11 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       url.searchParams.set("mitVias", "false");
       const body = await requestJson<{ entries?: DbDeparture[] }>(url);
       // The DB endpoint returns buses and other products as well. Only fetch
-      // full journey details for regional RE services; the departure response
+      // full journey details for regional RE/RB services; the departure response
       // itself does not contain the final scheduled arrival.
       const entries = (body.entries ?? []).filter((entry) => {
         const name = displayName(entry.verkehrmittel)?.toUpperCase() ?? "";
-        return entry.journeyId && entry.zeit && entry.verkehrmittel?.produktGattung === "REGIONAL" && name.startsWith("RE");
+        return entry.journeyId && entry.zeit && entry.verkehrmittel?.produktGattung === "REGIONAL" && /^(?:RE|RB)\s*\d/.test(name);
       });
       const stopTimes = (await Promise.all(entries.map(async (entry): Promise<MotisStopTime | null> => {
         try {

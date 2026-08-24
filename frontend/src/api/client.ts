@@ -26,6 +26,8 @@ export type SkippedDisruption = { key: string; reason: string };
 
 export type TrainHistory = {
   lineNumber: string;
+  lineGameName: string | null;
+  lineGameDescription: string | null;
   trainNumberStart: number;
   trainNumberEnd: number;
   mostPopularStartStation: string | null;

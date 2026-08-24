@@ -4,11 +4,13 @@ services:
       context: ./frontend
       target: production
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/delayrace}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/delayrace/}
     depends_on:
       backend:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:5173:5173"
 
   backend:
     build:
@@ -29,6 +31,8 @@ services:
       HISTORY_SERVICE_TIMEOUT_MS: ${HISTORY_SERVICE_TIMEOUT_MS:-2000}
       HISTORY_SERVICE_CACHE_TTL_SECONDS: ${HISTORY_SERVICE_CACHE_TTL_SECONDS:-300}
       EVENT_TIMEZONE: ${EVENT_TIMEZONE:-Europe/Berlin}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3001}:3001"
     volumes:
       - sqlite_data:/data
     healthcheck:
@@ -36,30 +40,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  nginx:
-    build:
-      context: ./deploy/nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "${BACKEND_PORT:-3001}:3001"
-    volumes:
-      - certbot_www:/var/www/certbot
-      - letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      frontend:
-        condition: service_started
-      backend:
-        condition: service_healthy
-
-  certbot:
-    image: certbot/certbot:latest
-    profiles: ["certbot"]
-    volumes:
-      - certbot_www:/var/www/certbot
-      - letsencrypt:/etc/letsencrypt
 
   loki:
     image: ${LOKI_IMAGE:-grafana/loki:3.5.0}
@@ -113,11 +93,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      - "127.0.0.1:3000:3000"
 
 volumes:
   sqlite_data:
-  certbot_www:
-  letsencrypt:
   loki_data:
   alloy_data:
   grafana_data:

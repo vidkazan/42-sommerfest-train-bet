@@ -4,6 +4,8 @@ import type { TrainHistory } from "./history-data-source.js";
 
 const history = (overrides: Partial<TrainHistory>): TrainHistory => ({
   lineNumber: "RE18",
+  lineGameName: null,
+  lineGameDescription: null,
   trainNumberStart: 18909,
   trainNumberEnd: 18982,
   mostPopularStartStation: null,

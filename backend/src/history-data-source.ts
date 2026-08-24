@@ -1,5 +1,7 @@
 export type TrainHistory = {
   lineNumber: string;
+  lineGameName: string | null;
+  lineGameDescription: string | null;
   trainNumberStart: number;
   trainNumberEnd: number;
   mostPopularStartStation: string | null;
@@ -47,6 +49,8 @@ export type TrainHistory = {
 
 type HistoryResponse = {
   line_number?: unknown;
+  line_game_name?: unknown;
+  line_game_description?: unknown;
   train_number_start?: unknown;
   train_number_end?: unknown;
   most_popular_start_station?: unknown;
@@ -100,6 +104,8 @@ const normalize = (body: HistoryResponse): TrainHistory | null => {
 
   return {
     lineNumber,
+    lineGameName: stringValue(body.line_game_name),
+    lineGameDescription: stringValue(body.line_game_description),
     trainNumberStart,
     trainNumberEnd,
     mostPopularStartStation: stringValue(body.most_popular_start_station),

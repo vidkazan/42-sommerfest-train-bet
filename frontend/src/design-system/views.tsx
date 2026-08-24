@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
@@ -8,6 +8,7 @@ import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./co
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 import { trainColor } from "./trainColors";
+import { applyHistoryRatings } from "../historyRatings";
 import { RaceStage } from "./RaceStage";
 import { TrainLabel } from "./TrainLabel";
 
@@ -39,7 +40,7 @@ export type AdminSetupViewProps = {
   onManualStationIdsChange: (value: string) => void; onGameNameChange: (value: string) => void; onEventDateChange: (value: string) => void;
   onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onGameEndTimeChange: (value: string) => void; onCreateGame: () => void;
 };
-export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; minimumStars: string; maximumStars: string; minimumDelayMinutes: string; maximumDelayMinutes: string; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onMinimumStarsChange: (value: string) => void; onMaximumStarsChange: (value: string) => void; onMinimumDelayMinutesChange: (value: string) => void; onMaximumDelayMinutesChange: (value: string) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
+export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; minimumStars: string; maximumStars: string; minimumDelayMinutes: string; maximumDelayMinutes: string; onlyJourneysWithGameName: boolean; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onMinimumStarsChange: (value: string) => void; onMaximumStarsChange: (value: string) => void; onMinimumDelayMinutesChange: (value: string) => void; onMaximumDelayMinutesChange: (value: string) => void; onOnlyJourneysWithGameNameChange: (value: boolean) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
 
 export function CountdownBadge({ label, target }: { label: string; target?: string | null }) {
@@ -101,6 +102,11 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
   const [emblaRef, emblaApi] = useEmblaCarousel({ align: "center", containScroll: "trimSnaps", loop: false });
   const selectedIndex = journeys.findIndex((journey) => journey.id === selectedTrainId);
   const [activeIndex, setActiveIndex] = useState(() => selectedIndex >= 0 ? selectedIndex : 0);
+  const selectedTrainIdRef = useRef(selectedTrainId);
+  const onSelectTrainRef = useRef(onSelectTrain);
+  const syncingFromSelectionRef = useRef(false);
+  selectedTrainIdRef.current = selectedTrainId;
+  onSelectTrainRef.current = onSelectTrain;
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -108,16 +114,23 @@ export function BetView({ journeys, selectedTrainId, username, betSubmitted, loa
       const index = emblaApi.selectedScrollSnap();
       setActiveIndex(index);
       const journey = journeys[index];
-      if (journey && journey.id !== selectedTrainId) onSelectTrain(journey.id);
+      if (!syncingFromSelectionRef.current && journey && journey.id !== selectedTrainIdRef.current) onSelectTrainRef.current(journey.id);
     };
     emblaApi.on("select", updateActiveIndex);
     updateActiveIndex();
     return () => { emblaApi.off("select", updateActiveIndex); };
-  }, [emblaApi, journeys, onSelectTrain, selectedTrainId]);
+  }, [emblaApi, journeys]);
 
   useEffect(() => {
     if (!emblaApi || selectedIndex < 0 || selectedIndex === emblaApi.selectedScrollSnap()) return;
+    syncingFromSelectionRef.current = true;
+    const clearSync = () => { syncingFromSelectionRef.current = false; };
+    emblaApi.on("settle", clearSync);
     emblaApi.scrollTo(selectedIndex);
+    return () => {
+      emblaApi.off("settle", clearSync);
+      syncingFromSelectionRef.current = false;
+    };
   }, [emblaApi, selectedIndex]);
 
   const scrollToIndex = (index: number) => {
@@ -374,21 +387,29 @@ export function AdminSetupView({ stationQuery, stationResults, selectedStations,
   </>;
 }
 
-export function AdminReviewView({ game, journeys, minimumDuration, minimumStars, maximumStars, minimumDelayMinutes, maximumDelayMinutes, selectedJourneyIds, disruptionsJson, constructionJson, footballJson, skippedDisruptions, disruptionMessage, loading, whitelistSaved, error, onDisruptionsJsonChange, onConstructionJsonChange, onFootballJsonChange, onApplyDisruptions, onFetch, onMinimumDurationChange, onMinimumStarsChange, onMaximumStarsChange, onMinimumDelayMinutesChange, onMaximumDelayMinutesChange, onToggleJourney, onSave, onActivate }: AdminReviewViewProps) {
+export function AdminReviewView({ game, journeys, minimumDuration, minimumStars, maximumStars, minimumDelayMinutes, maximumDelayMinutes, onlyJourneysWithGameName, selectedJourneyIds, disruptionsJson, constructionJson, footballJson, skippedDisruptions, disruptionMessage, loading, whitelistSaved, error, onDisruptionsJsonChange, onConstructionJsonChange, onFootballJsonChange, onApplyDisruptions, onFetch, onMinimumDurationChange, onMinimumStarsChange, onMaximumStarsChange, onMinimumDelayMinutesChange, onMaximumDelayMinutesChange, onOnlyJourneysWithGameNameChange, onToggleJourney, onSave, onActivate }: AdminReviewViewProps) {
   const minimumStarValue = Number(minimumStars);
   const maximumStarValue = Number(maximumStars);
   const minimumDelayValue = Number(minimumDelayMinutes);
   const maximumDelayValue = Number(maximumDelayMinutes);
   const validStarRange = minimumStarValue >= 0 && maximumStarValue <= 20 && minimumStarValue <= maximumStarValue;
   const validDelayRange = minimumDelayValue >= 0 && maximumDelayValue <= 60 && minimumDelayValue <= maximumDelayValue;
-  const visibleJourneys = journeys.filter((journey) => {
+  const baseJourneys = journeys.filter((journey) => {
     if (journey.durationSeconds < Number(minimumDuration) * 3600) return false;
-    const ratings = [journey.history?.delayStars, journey.history?.chaosStars, journey.history?.disasterStars, journey.history?.cancellationStars];
+    if (onlyJourneysWithGameName && !journey.history?.lineGameName?.trim()) return false;
     const averageDelay = journey.history?.averageDelayMinutes;
-    if (!ratings.every((rating): rating is number => typeof rating === "number" && Number.isFinite(rating)) || typeof averageDelay !== "number" || !Number.isFinite(averageDelay)) return false;
-    const totalStars = ratings.reduce((total, rating) => total + rating, 0);
-    return validStarRange && validDelayRange && totalStars >= minimumStarValue && totalStars <= maximumStarValue
+    return typeof averageDelay === "number" && Number.isFinite(averageDelay)
       && averageDelay >= minimumDelayValue && averageDelay <= maximumDelayValue;
+  });
+  const ratedHistories = applyHistoryRatings(baseJourneys.map((journey) => journey.history ?? null));
+  const visibleJourneys = baseJourneys.flatMap((journey, index) => {
+    const ratedHistory = ratedHistories[index];
+    if (!ratedHistory) return [];
+    const recalculatedRatings = [ratedHistory.delayStars, ratedHistory.chaosStars, ratedHistory.disasterStars, ratedHistory.cancellationStars];
+    if (!recalculatedRatings.every((rating): rating is number => typeof rating === "number" && Number.isFinite(rating))) return [];
+    const totalStars = recalculatedRatings.reduce((total, rating) => total + rating, 0);
+    if (!validStarRange || !validDelayRange || totalStars < minimumStarValue || totalStars > maximumStarValue) return [];
+    return [{ ...journey, history: ratedHistory }];
   });
   return <>
     <h2>{game.name}</h2>
@@ -401,6 +422,7 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
         <option value="0">Any duration</option><option value="1">At least 1 hour</option><option value="2">At least 2 hours</option><option value="3">At least 3 hours</option><option value="4">At least 4 hours</option>
       </select>
       <div className="admin-star-filter">
+        <label className="checkbox-field"><input type="checkbox" checked={onlyJourneysWithGameName} onChange={(event) => onOnlyJourneysWithGameNameChange(event.target.checked)} /> Only journeys with game name</label>
         <label className="field-label" htmlFor="minimum-stars">RPG star range <output>{minimumStars}–{maximumStars} / 20</output></label>
         <div className="admin-star-filter__range">
           <input id="minimum-stars" className="admin-star-filter__range-min" aria-label="Minimum RPG stars" type="range" min="0" max="20" step="1" value={minimumStars} onChange={(event) => onMinimumStarsChange(event.target.value)} />
@@ -505,6 +527,15 @@ function MapSelectedLineHandler({ points, selectedTrainId }: { points: Array<{ l
   return null;
 }
 
+function MapSelectedTrainPanes() {
+  const map = useMap();
+  const selectedLinePane = map.getPane("selectedTrainPane") ?? map.createPane("selectedTrainPane");
+  const selectedMarkerPane = map.getPane("selectedTrainMarkerPane") ?? map.createPane("selectedTrainMarkerPane");
+  selectedLinePane.style.zIndex = "650";
+  selectedMarkerPane.style.zIndex = "710";
+  return null;
+}
+
 function MapEventLayer({ mapEvents }: { mapEvents: MapEvent[] }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
@@ -529,7 +560,7 @@ function MapEventLayer({ mapEvents }: { mapEvents: MapEvent[] }) {
   }));
   const eventIcon = (events: MapEvent[]) => {
     const category = events[0]?.category ?? "disruption";
-    const symbol = events.length > 1 ? events.length : category === "construction" ? "⚒" : category === "football" ? "⚽" : "⚠";
+    const symbol = events.length > 1 ? events.length : category === "construction" ? "🚧" : category === "football" ? "⚽" : "⚠️";
     return new DivIcon({ className: "train-map__event-icon", html: `<span class="train-map__event-marker train-map__event-marker--${category}">${symbol}</span>`, iconSize: [20, 20], iconAnchor: [10, 10] });
   };
   return <>{eventGroups.map((group) => <Marker key={group.events.map((event) => event.id).join("-")} position={[group.latitude, group.longitude]} icon={eventIcon(group.events)}>
@@ -558,6 +589,7 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
 
   return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
     <MapResizeHandler />
+    <MapSelectedTrainPanes />
     <MapFitTrips points={allPoints} />
     <MapSelectedLineHandler points={selectedRoute?.points ?? []} selectedTrainId={selectedTrainId} />
     <MapEventLayer mapEvents={mapEvents} />
@@ -599,11 +631,11 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
       const labelState = cancelled ? " · CANCELLED · WINNER" : isLeading ? " · LEADING" : "";
       const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label ds-train-label ds-train-label--compact ${cancelled ? "is-cancelled" : ""}" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}${labelState}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
       return <Fragment key={journey.id}>
-        <Polyline positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine || isLeading ? 6 : 3, opacity: selected || isMine || isLeading ? 1 : 0.85, dashArray: cancelled ? "8 8" : undefined }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
+        <Polyline pane={selected ? "selectedTrainPane" : "overlayPane"} positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine || isLeading ? 6 : 3, opacity: selected || isMine || isLeading ? 1 : 0.85, dashArray: cancelled ? "8 8" : undefined }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>
         </Polyline>
         {endpoints.map((point, index) => <CircleMarker key={`${journey.id}-${index === 0 ? "origin" : "arrival"}`} center={[point.lat, point.lon]} radius={index === 0 ? 4 : 5} pathOptions={{ color: lineColor, fillColor: lineColor, fillOpacity: 1, weight: 2 }}><Popup>{index === 0 ? `Departure: ${journey.origin}` : `Arrival: ${journey.destination}`}</Popup></CircleMarker>)}
-        {markerPoint && <Marker pane="markerPane" position={[markerPoint.lat, markerPoint.lon]} icon={trainIcon} eventHandlers={{ click: () => onSelect(journey.id) }}><Popup><strong>{journey.displayName}</strong><br />{cancelled ? "Cancelled — winner" : raceDelayMinutes === null || raceDelayMinutes === undefined ? "Delay unavailable" : `${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min delay gained`}</Popup></Marker>}
+        {markerPoint && <Marker pane={selected ? "selectedTrainMarkerPane" : "markerPane"} position={[markerPoint.lat, markerPoint.lon]} icon={trainIcon} zIndexOffset={selected ? 1000 : isMine || isLeading ? 500 : 0} eventHandlers={{ click: () => onSelect(journey.id) }}><Popup><strong>{journey.displayName}</strong><br />{cancelled ? "Cancelled — winner" : raceDelayMinutes === null || raceDelayMinutes === undefined ? "Delay unavailable" : `${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min delay gained`}</Popup></Marker>}
       </Fragment>;
     })}
   </MapContainer>;

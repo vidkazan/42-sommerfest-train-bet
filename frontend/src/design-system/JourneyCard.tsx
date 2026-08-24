@@ -88,7 +88,8 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
   const averageDelay = journey.history ? `${journey.history.delay.averageMinutes >= 0 ? "+" : "−"}${Math.abs(journey.history.delay.averageMinutes).toFixed(1)}m` : null;
   const [activeBadgeDescription, setActiveBadgeDescription] = useState<string | null>(null);
   const toggleBadgeDescription = (description: string) => setActiveBadgeDescription((current) => current === description ? null : description);
-  const gameName = `${leg.lineName ?? "Train"} Express`;
+  const gameName = journey.history?.lineGameName ?? `${leg.lineName ?? "Train"} Express`;
+  const gameDescription = journey.history?.lineGameDescription;
   return <article data-journey-id={journey.id} className={`journey-card ds-journey-card ds-journey-cell ds-journey-card--${mode} ${selected ? "selected" : ""} ${isDisabled ? "disabled" : ""} ${selectable ? "selectable" : ""} ${className}`.trim()} aria-disabled={isDisabled || undefined} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectJourney : undefined} onKeyDown={selectable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectJourney(); } } : undefined}>
     {mode === "leaderboard" && <div className="ds-journey-card__leaderboard-top">
       <div className="ds-journey-card__labels">
@@ -104,7 +105,7 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
       <TrainLabel label={leg.lineName} trainId={journey.id} raceColor={journey.raceColor} size="regular" cancelled={leg.cancelled} />
     </div>}
     {(mode === "public" || mode === "admin") && <section className="rpg-train-card" aria-label="Train characteristics">
-      <div className="rpg-train-card__identity"><span className="rpg-train-card__emoji" aria-hidden="true">🚆</span><strong>{gameName}</strong><span>{leg.lineName ?? journey.displayName}</span></div>
+      <div className="rpg-train-card__identity"><span className="rpg-train-card__emoji" aria-hidden="true">🚆</span><strong>{gameName}</strong><span>{leg.lineName ?? journey.displayName}</span>{gameDescription && <p className="rpg-train-card__description">{gameDescription}</p>}</div>
       <div className="rpg-train-card__specs">
         <div><span>⏱ DELAY <button type="button" className="rpg-train-card__info" aria-label="Explain delay rating" aria-expanded={activeBadgeDescription === "Delay rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Delay rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.delayStars)}</strong></div>
         <div><span>🎲 CHAOS <button type="button" className="rpg-train-card__info" aria-label="Explain chaos rating" aria-expanded={activeBadgeDescription === "Chaos rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Chaos rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.chaosStars)}</strong></div>

@@ -37,7 +37,9 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .train-map__event-icon { background: transparent; border: 0; }
 .train-map__event-marker { align-items: center; background: #f59e0b; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 1px 3px rgb(0 0 0 / 45%); color: #111; display: flex; font-size: .62rem; font-weight: 800; height: 20px; justify-content: center; opacity: .5; width: 20px; }
 .train-map__legend-event { background: #f59e0b; border: 1px solid #fff; border-radius: 50%; display: inline-block; height: .65rem; width: .65rem; }
-.train-map__event-marker--construction, .train-map__legend-event--construction { background: #8b5cf6; }
+.train-map__event-marker--construction, .train-map__legend-event--construction { background: #f59e0b; }
+.train-map__event-marker--construction { background: transparent; border: 0; box-shadow: none; font-size: .9rem; opacity: 1; }
+.train-map__event-marker--disruption { background: #f59e0b; font-size: .9rem; opacity: 1; }
 .train-map__event-marker--football, .train-map__legend-event--football { background: #16a34a; }
 .train-map__event-popup article + article { border-top: 1px solid #ddd; margin-top: .5rem; padding-top: .5rem; }
 .train-map__event-popup p { margin: .25rem 0; max-width: 18rem; white-space: pre-wrap; }
@@ -206,6 +208,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .rpg-train-card__identity { align-items: center; display: grid; gap: .15rem; justify-items: center; text-align: center; }
 .rpg-train-card__identity strong { color: var(--ds-text-primary); font-size: 1.1rem; }
 .rpg-train-card__identity span:last-child { color: var(--ds-text-muted); font-size: .8rem; font-weight: 700; }
+.rpg-train-card__description { color: var(--ds-text-secondary); font-size: .75rem; line-height: 1.35; margin: 0; max-width: 28rem; }
 .rpg-train-card__emoji { font-size: 2rem; }
 .rpg-train-card__specs { display: grid; gap: .35rem; }
 .rpg-train-card__specs div, .rpg-train-card__metrics span { align-items: center; display: flex; justify-content: space-between; gap: var(--ds-space-2); }

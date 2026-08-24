@@ -18,6 +18,11 @@ describe("normalizeCandidate", () => {
     expect(result?.durationSeconds).toBe(12600);
     expect(result).toMatchObject({ lineName: "RE7", trainNumber: "28501" });
   });
+  it("accepts a realtime RB journey", () => {
+    const result = normalizeCandidate({ ...base, displayName: "RB 25 (12345)", lineName: null, trainNumber: null }, "hamm", start, end);
+    expect(result?.status).toBe("candidate");
+    expect(result).toMatchObject({ lineName: "RB25", trainNumber: "12345" });
+  });
   it("derives history identifiers from provider display names", () => {
     const result = normalizeCandidate({ ...base, lineName: null, trainNumber: null, displayName: "RE 11 (26728)" }, "hamm", start, end);
     expect(result).toMatchObject({ lineName: "RE11", trainNumber: "26728" });

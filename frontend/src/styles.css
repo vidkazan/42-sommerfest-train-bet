@@ -59,6 +59,8 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .progress-view { background: transparent; border-radius: var(--ds-radius-lg); display: grid; gap: var(--ds-space-4); grid-template-rows: minmax(0, 1fr); padding: 0; }
 .race-chart-view { --race-label-width: 8rem; background: var(--ds-surface-muted); border: 1px solid var(--ds-border-subtle); border-radius: var(--ds-radius-lg); box-shadow: var(--ds-shadow); color: var(--ds-text-primary); min-height: 100%; overflow: hidden; padding: var(--ds-space-5); position: relative; }
 .race-chart__header { align-items: flex-start; display: flex; gap: var(--ds-space-3); margin-bottom: clamp(1.5rem, 5vw, 3rem); }
+.race-chart__header > div:first-child { min-width: 0; }
+.race-chart__next-update { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
 .race-chart__accent { background: var(--ds-accent-blue); flex: 0 0 .3rem; height: 3.2rem; }
 .race-chart__header h2 { color: var(--ds-text-primary); font-size: var(--ds-font-title); line-height: 1.2; margin: 0; }
 .race-chart__header p { color: var(--ds-text-muted); font-size: var(--ds-font-small); margin: var(--ds-space-1) 0 0; }
@@ -443,6 +445,8 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-chart__header { margin-bottom: var(--ds-space-3); }
   .race-chart-view .race-chart__header h2 { font-size: 1.35rem; }
   .race-chart-view .race-chart__header p { font-size: .8rem; }
+  .race-chart-view .race-chart__header { flex-wrap: wrap; }
+  .race-chart-view .race-chart__next-update { margin-left: 0; }
   .race-chart__row { min-height: 3.6rem; }
   .race-chart__label { align-items: flex-start; flex-direction: column; font-size: var(--ds-font-small); justify-content: center; }
 }

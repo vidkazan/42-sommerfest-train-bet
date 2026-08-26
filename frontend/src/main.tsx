@@ -125,6 +125,8 @@ function App() {
   const [leaderboard, setLeaderboard] = useState<LiveLeaderboardEntry[]>([]);
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [leaderboardStale, setLeaderboardStale] = useState(false);
+  const [nextProgressUpdateAt, setNextProgressUpdateAt] = useState<number | null>(null);
+  const [progressUpdating, setProgressUpdating] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; trains: unknown[] } | null>(null);
 
@@ -232,15 +234,26 @@ function App() {
   useEffect(() => {
     if (mode !== "public" || (!betSubmitted && !bettingClosed)) return;
     let active = true;
+    let timer: number | null = null;
+    const refreshIntervalMs = 60_000;
     const loadProgress = async () => {
+      if (!active) return;
+      setProgressUpdating(true);
       try {
         const [nextLeaderboard, nextJourneys, nextEvents] = await Promise.all([api.getLeaderboard(publicGameId ?? ""), api.getTrains(publicGameId ?? ""), api.getEvents(publicGameId ?? "")]);
         if (active) { setLeaderboard(nextLeaderboard.entries); setLeaderboardUpdatedAt(nextLeaderboard.lastUpdatedAt); setLeaderboardStale(nextLeaderboard.stale); setJourneys(nextJourneys.trains); setLiveEvents(nextEvents.events); }
       } catch { /* retain the last successful progress snapshot */ }
+      finally {
+        if (active) {
+          setProgressUpdating(false);
+          setNextProgressUpdateAt(Date.now() + refreshIntervalMs);
+          timer = window.setTimeout(() => { void loadProgress(); }, refreshIntervalMs);
+        }
+      }
     };
+    setNextProgressUpdateAt(Date.now() + refreshIntervalMs);
     void loadProgress();
-    const timer = window.setInterval(loadProgress, 60_000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => { active = false; setProgressUpdating(false); if (timer !== null) window.clearTimeout(timer); };
   }, [mode, betSubmitted, bettingClosed, publicGameId]);
 
   useEffect(() => {
@@ -568,7 +581,7 @@ function App() {
           <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>
         </nav>
         {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
-        {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} onSelectTrain={selectTrain} />}
+        {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} nextUpdateAt={nextProgressUpdateAt} updating={progressUpdating} onSelectTrain={selectTrain} />}
         {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView
           entries={bettedEntries}
           journeys={journeys}

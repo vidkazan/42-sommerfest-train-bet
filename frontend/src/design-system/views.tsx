@@ -31,7 +31,7 @@ export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; entries: LiveLeaderboardEntry[]; journeys: Journey[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
-export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; onSelectTrain?: (trainId: string) => void };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; nextUpdateAt?: number | null; updating?: boolean; onSelectTrain?: (trainId: string) => void };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; loading: boolean; error: string | null; message: string | null; onDelete: (game: Game) => void; onContinue: (game: Game) => void; onDashboard: (game: Game) => void; onPopulateBets: (game: Game) => void };
@@ -335,8 +335,9 @@ export function LiveEventsView({ myTrainId, events, entries, journeys, onSelectT
   </section>;
 }
 
-export function RaceChartView({ entries, journeys, currentParticipantId, final = false, onSelectTrain }: RaceChartViewProps) {
+export function RaceChartView({ entries, journeys, currentParticipantId, final = false, nextUpdateAt = null, updating = false, onSelectTrain }: RaceChartViewProps) {
   const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
   const detailJourney = detailEntry ? {
     ...(journeys.find((journey) => journey.id === detailEntry.trainId) ?? {}),
@@ -363,6 +364,11 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [detailTrainId]);
+  useEffect(() => {
+    if (final || !nextUpdateAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [final, nextUpdateAt]);
   const stageEntries = entries.map((entry) => ({
     trainId: entry.trainId,
     displayName: entry.displayName,
@@ -378,8 +384,9 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
     isMine: entry.bettors.some((bettor) => bettor.participantId === currentParticipantId),
     delayHistory: entry.delayHistory,
   }));
+  const secondsUntilUpdate = nextUpdateAt ? Math.max(0, Math.ceil((nextUpdateAt - now) / 1_000)) : null;
   return <section className="race-chart-view" aria-label="Delay race">
-    <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div></header>
+    <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div>{!final && <Badge variant="secondary" className="race-chart__next-update" aria-label={updating ? "Updating live race data" : secondsUntilUpdate === null ? "Waiting for the next live race update" : `Next live race update in ${secondsUntilUpdate} seconds`}>{updating ? "Updating…" : secondsUntilUpdate === null ? "Waiting for update" : `Next update in ${secondsUntilUpdate}s`}</Badge>}</header>
     <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} />
     {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="race-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
       <section className="train-detail-dialog__panel">

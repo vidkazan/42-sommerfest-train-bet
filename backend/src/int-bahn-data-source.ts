@@ -158,6 +158,13 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
     const endpoints = origin && destination
       ? JSON.stringify([{ name: origin }, { name: destination }])
       : null;
+    const stops = (body.halte ?? []).map((halt) => ({
+      name: halt.name,
+      scheduledArrival: berlinLocalTimestamp(halt.ankunft?.sollzeit),
+      scheduledDeparture: berlinLocalTimestamp(halt.abfahrt?.sollzeit),
+      actualArrival: berlinLocalTimestamp(halt.ankunft?.echtzeit),
+      actualDeparture: berlinLocalTimestamp(halt.abfahrt?.echtzeit),
+    }));
     return {
       actualArrival,
       actualDeparture,
@@ -176,6 +183,9 @@ export const createIntBahnDataSource = (options: { baseUrl: string; cacheTtlSeco
       geometry: null,
       endpoints,
       alerts: [],
+      intermediateStops: stops.slice(1, -1).map((stop) => ({ name: stop.name, scheduledArrival: stop.scheduledArrival, scheduledDeparture: stop.scheduledDeparture })),
+      stops,
+      routeJson: stops.length > 1 ? JSON.stringify(stops) : null,
     };
   };
 

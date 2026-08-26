@@ -94,7 +94,7 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
       <div className="ds-journey-card__labels">
         <strong className="ds-journey-card__position"><Badge variant="clear" className="journey-card__rank-badge">{rankLabel}</Badge></strong>
         {onTrainLabelClick ? <TrainLabelButton label={leg.lineName} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} cancelled={leg.cancelled} onClick={onTrainLabelClick} /> : <TrainLabel label={leg.lineName} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} size="compact" cancelled={leg.cancelled} />}
-        {isCurrentUser && <Badge variant="blue">My train</Badge>}
+        {isCurrentUser && <Badge variant="blue">My</Badge>}
         {raceStatus && <Badge variant={raceStatus.includes("CANCELLED") || raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
         {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
       </div>
@@ -107,11 +107,13 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
       <div className="rpg-train-card__identity"><span className="rpg-train-card__emoji" aria-hidden="true">🚆</span><strong>{gameName}</strong><span>{leg.lineName ?? journey.displayName}</span>{gameDescription && <p className="rpg-train-card__description">{gameDescription}</p>}</div>
       <div className="rpg-train-card__specs">
         <div><span>⏱ DELAY <button type="button" className="rpg-train-card__info" aria-label="Explain delay rating" aria-expanded={activeBadgeDescription === "Delay rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Delay rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.delayStars)}</strong></div>
+        <div><span>⌛ DURATION <button type="button" className="rpg-train-card__info" aria-label="Explain duration rating" aria-expanded={activeBadgeDescription === "Duration rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Duration rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.durationStars)}</strong></div>
         <div><span>🎲 CHAOS <button type="button" className="rpg-train-card__info" aria-label="Explain chaos rating" aria-expanded={activeBadgeDescription === "Chaos rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Chaos rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.chaosStars)}</strong></div>
         <div><span>💥 DISASTER <button type="button" className="rpg-train-card__info" aria-label="Explain disaster rating" aria-expanded={activeBadgeDescription === "Disaster rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Disaster rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.disasterStars)}</strong></div>
         <div><span>❌ CANCELLATION <button type="button" className="rpg-train-card__info" aria-label="Explain cancellation rating" aria-expanded={activeBadgeDescription === "Cancellation rating"} onClick={(event) => { event.stopPropagation(); toggleBadgeDescription("Cancellation rating"); }}>ⓘ</button></span><strong>{ratingStars(journey.history?.cancellationStars)}</strong></div>
       </div>
       {activeBadgeDescription === "Delay rating" && <p className="rpg-train-card__spec-description">Relative rating of typical average delay. More delay than the other selected trains means more stars.</p>}
+      {activeBadgeDescription === "Duration rating" && <p className="rpg-train-card__spec-description">Relative rating of scheduled journey duration. Longer journeys than the other candidates mean more stars.</p>}
       {activeBadgeDescription === "Chaos rating" && <p className="rpg-train-card__spec-description">Relative rating of delay spread: the difference between the 90th and 50th percentile delays. A wider spread means less predictable delays.</p>}
       {activeBadgeDescription === "Disaster rating" && <p className="rpg-train-card__spec-description">Relative severe-delay risk based on 30+ minute and 60+ minute delays. It is a rating, not a probability.</p>}
       {activeBadgeDescription === "Cancellation rating" && <p className="rpg-train-card__spec-description">Relative cancellation risk based on the historical cancellation rate. More cancellations than the other selected trains means more stars.</p>}

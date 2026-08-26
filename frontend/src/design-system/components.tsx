@@ -6,7 +6,8 @@ const badgeColors: Record<BadgeVariant, string> = { secondary: "color-mix(in srg
 
 export function formatDelayMinutes(minutes: number | null | undefined) {
   if (minutes === null || minutes === undefined) return "—";
-  return `${minutes >= 0 ? "+" : "−"}${Math.abs(minutes)}min`;
+  const rounded = Math.round(minutes);
+  return `${rounded >= 0 ? "+" : "−"}${Math.abs(rounded)}min`;
 }
 
 export function DelayBadge({ minutes, className = "", style }: { minutes: number | null | undefined; className?: string; style?: CSSProperties }) {

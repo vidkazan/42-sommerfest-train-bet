@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import type { AdminDashboard, Game, Journey, LiveEvent, MapEvent, SkippedDisruption, Station } from "../api/client";
+import type { AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
 import { Badge, BadgeButton, Button, DelayBadge, Notice, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
@@ -13,6 +13,7 @@ import { RaceStage } from "./RaceStage";
 import { gameNameEmoji, TrainLabel, TrainLabelButton } from "./TrainLabel";
 
 const publicGamePath = (gameId: string) => `${import.meta.env.BASE_URL}game/${gameId}`;
+const mapZoomBoost = 0.8;
 
 export type PublicView = "browse" | "progress" | "race" | "leaderboard" | "events";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
@@ -20,7 +21,7 @@ export type LiveLeaderboardEntry = {
   trainId: string; displayName: string; origin: string; destination: string; position: number | null;
   scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; status: string;
   stopCount: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null;
-  cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
+  cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null; stops?: LiveStop[];
   betCount?: number;
   raceColor?: string | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }>;
 };
@@ -31,7 +32,7 @@ export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; entries: LiveLeaderboardEntry[]; journeys: Journey[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
-export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; nextUpdateAt?: number | null; updating?: boolean; onSelectTrain?: (trainId: string) => void };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; nextUpdateAt?: number | null; updating?: boolean; onSelectTrain?: (trainId: string) => void; onOpenBets?: () => void };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; loading: boolean; error: string | null; message: string | null; onDelete: (game: Game) => void; onContinue: (game: Game) => void; onDashboard: (game: Game) => void; onPopulateBets: (game: Game) => void };
@@ -46,7 +47,7 @@ export type AdminSetupViewProps = {
 export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; minimumStars: string; maximumStars: string; minimumDelayMinutes: string; maximumDelayMinutes: string; onlyJourneysWithGameName: boolean; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onMinimumStarsChange: (value: string) => void; onMaximumStarsChange: (value: string) => void; onMinimumDelayMinutesChange: (value: string) => void; onMaximumDelayMinutesChange: (value: string) => void; onOnlyJourneysWithGameNameChange: (value: boolean) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
 
-export function CountdownBadge({ label, target }: { label: string; target?: string | null }) {
+export function CountdownBadge({ label, target, variant = "blue" }: { label: string; target?: string | null; variant?: "blue" | "secondary" }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -61,10 +62,10 @@ export function CountdownBadge({ label, target }: { label: string; target?: stri
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const value = hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : `${minutes}:${String(seconds).padStart(2, "0")}`;
-  return <Badge variant="blue" className="admin-dashboard__countdown">{label} {value}</Badge>;
+  return <Badge variant={variant} className="admin-dashboard__countdown">{label} {value}</Badge>;
 }
 
-export function AdminDashboardView({ dashboard }: { dashboard: AdminDashboard }) {
+export function AdminDashboardView({ dashboard, nextUpdateAt }: { dashboard: AdminDashboard; nextUpdateAt?: number | null }) {
   const finished = dashboard.state === "finished";
   const countdownLabel = dashboard.state === "waiting" ? "Starts in" : "Ends in";
   const countdownTarget = dashboard.state === "waiting" ? dashboard.game?.journeyDepartureStart : dashboard.game?.gameEndTime;
@@ -73,9 +74,9 @@ export function AdminDashboardView({ dashboard }: { dashboard: AdminDashboard })
   return <section className="admin-dashboard" aria-label="Race dashboard">
     <header className="admin-dashboard__header">
       <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
-      <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <CountdownBadge label={countdownLabel} target={countdownTarget} />}</div>
+      <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
     </header>
-    <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} {totalBets === 1 ? "bet" : "bets"}</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
+    <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} 🎲</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
     <RaceStage entries={stageEntries} final={finished} />
   </section>;
 }
@@ -106,7 +107,7 @@ export function PlayerOnboarding({ open, onClose }: { open: boolean; onClose: ()
       <p>Make one prediction, then watch the timetable unravel.</p>
       <div className="player-onboarding__steps">
         <article><span aria-hidden="true">🚆</span><strong>Choose a train</strong><p>Browse the map and train cards to find your contender.</p></article>
-        <article><span aria-hidden="true">🎟️</span><strong>Place one bet</strong><p>Enter a nickname and back one train. Others can back it too.</p></article>
+        <article><span aria-hidden="true">🎲</span><strong>Place one bet</strong><p>Enter a nickname and back one train. Others can back it too.</p></article>
         <article><span aria-hidden="true">🏁</span><strong>Follow the race</strong><p>If your train gains the most delay, you win. Cancelled trains win immediately.</p></article>
       </div>
       <Notice className="player-onboarding__disclaimer"><strong>Alpha prototype:</strong> this experience is still being tested. Features can change or break, and live train data may be delayed, incomplete, or inaccurate. This is for entertainment—do not use it for real travel decisions. Bets close at 18:00.</Notice>
@@ -317,7 +318,7 @@ export function LiveEventsView({ myTrainId, events, entries, journeys, onSelectT
         const trainEntry = event.trainId ? entries.find((entry) => entry.trainId === event.trainId) : undefined;
         return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>
         <div className="live-event__body">
-          <div className="live-event__top">{event.trainId ? <TrainLabelButton label={event.displayName ?? event.title} gameName={journeys.find((journey) => journey.id === event.trainId)?.history?.lineGameName} trainId={event.trainId} raceColor={trainEntry?.raceColor} cancelled={trainEntry?.cancelled} onClick={() => { onSelectTrain(event.trainId!); setDetailTrainId(event.trainId!); }} /> : <strong className="live-event__title">{event.displayName ?? event.title}</strong>}<time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My train</Badge>}</div>
+          <div className="live-event__top">{event.trainId ? <TrainLabelButton label={event.displayName ?? event.title} gameName={journeys.find((journey) => journey.id === event.trainId)?.history?.lineGameName} trainId={event.trainId} raceColor={trainEntry?.raceColor} cancelled={trainEntry?.cancelled} onClick={() => { onSelectTrain(event.trainId!); setDetailTrainId(event.trainId!); }} /> : <strong className="live-event__title">{event.displayName ?? event.title}</strong>}<time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My</Badge>}</div>
           <div className="live-event__numbers">{numericEvent ? <strong className={`live-event__delay live-event__delay--${currentDelay! > 0 ? "late" : currentDelay! < 0 ? "early" : "on-time"}`}>{currentDelay! >= 0 ? "+" : "−"}{Math.abs(currentDelay!)} min</strong> : <strong className="live-event__delay">{event.title}</strong>}{numericEvent && <Badge variant="green" className="live-event__change">{changeLabel}</Badge>}</div>
           <p className="live-event__message">{numericEvent && event.message.startsWith("Delay ") ? event.title : event.message}</p>
         </div>
@@ -335,7 +336,7 @@ export function LiveEventsView({ myTrainId, events, entries, journeys, onSelectT
   </section>;
 }
 
-export function RaceChartView({ entries, journeys, currentParticipantId, final = false, nextUpdateAt = null, updating = false, onSelectTrain }: RaceChartViewProps) {
+export function RaceChartView({ entries, journeys, currentParticipantId, final = false, nextUpdateAt = null, updating = false, onSelectTrain, onOpenBets }: RaceChartViewProps) {
   const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
@@ -374,6 +375,8 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
     displayName: entry.displayName,
     gameName: journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName,
     scheduledArrival: entry.scheduledArrival,
+    routeJson: entry.routeJson,
+    stops: entry.stops,
     raceDelayMinutes: entry.raceDelayMinutes,
     finalDelayMinutes: entry.finalDelayMinutes,
     status: entry.status,
@@ -387,7 +390,7 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
   const secondsUntilUpdate = nextUpdateAt ? Math.max(0, Math.ceil((nextUpdateAt - now) / 1_000)) : null;
   return <section className="race-chart-view" aria-label="Delay race">
     <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div>{!final && <Badge variant="secondary" className="race-chart__next-update" aria-label={updating ? "Updating live race data" : secondsUntilUpdate === null ? "Waiting for the next live race update" : `Next live race update in ${secondsUntilUpdate} seconds`}>{updating ? "Updating…" : secondsUntilUpdate === null ? "Waiting for update" : `Next update in ${secondsUntilUpdate}s`}</Badge>}</header>
-    <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} />
+    <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} onOpenBets={onOpenBets} />
     {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="race-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
       <section className="train-detail-dialog__panel">
         <header className="train-detail-dialog__header">
@@ -455,7 +458,7 @@ export function LeaderboardView({ entries, journeys, currentParticipantId, selec
         <div className="leaderboard-row__top">
           <Badge variant="clear" className="journey-card__rank-badge">{entry.position === 1 ? "🥇" : entry.position === 2 ? "🥈" : entry.position === 3 ? "🥉" : entry.position ? `${entry.position}${entry.position % 100 >= 11 && entry.position % 100 <= 13 ? "th" : entry.position % 10 === 1 ? "st" : entry.position % 10 === 2 ? "nd" : entry.position % 10 === 3 ? "rd" : "th"} place` : "Waiting"}</Badge>
           {raceState && <Badge variant={raceStateVariant(raceState)}>{raceState}</Badge>}
-          <span onClick={(event) => event.stopPropagation()}><Badge variant="secondary" className="leaderboard-row__bet-count">{entry.bettors.length === 1 ? "1 bet" : `${entry.bettors.length} bets`}</Badge></span>
+          <span onClick={(event) => event.stopPropagation()}><Badge variant="secondary" className="leaderboard-row__bet-count">{entry.bettors.length} 🎲</Badge></span>
           <TrainLabelButton label={entry.displayName} gameName={journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName} trainId={entry.trainId} raceColor={entry.raceColor} cancelled={entry.cancelled} onClick={() => { onSelectTrain(entry.trainId); setDetailTrainId(entry.trainId); }} />
           {delayMinutes !== null && delayMinutes !== undefined && <DelayBadge minutes={delayMinutes} />}
         </div>
@@ -564,7 +567,7 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
   const maximumStarValue = Number(maximumStars);
   const minimumDelayValue = Number(minimumDelayMinutes);
   const maximumDelayValue = Number(maximumDelayMinutes);
-  const validStarRange = minimumStarValue >= 0 && maximumStarValue <= 20 && minimumStarValue <= maximumStarValue;
+  const validStarRange = minimumStarValue >= 0 && maximumStarValue <= 25 && minimumStarValue <= maximumStarValue;
   const validDelayRange = minimumDelayValue >= 0 && maximumDelayValue <= 60 && minimumDelayValue <= maximumDelayValue;
   const baseJourneys = journeys.filter((journey) => {
     if (journey.durationSeconds < Number(minimumDuration) * 3600) return false;
@@ -573,11 +576,11 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
     return typeof averageDelay === "number" && Number.isFinite(averageDelay)
       && averageDelay >= minimumDelayValue && averageDelay <= maximumDelayValue;
   });
-  const ratedHistories = applyHistoryRatings(baseJourneys.map((journey) => journey.history ?? null));
+  const ratedHistories = applyHistoryRatings(baseJourneys.map((journey) => journey.history ?? null), baseJourneys.map((journey) => journey.durationSeconds));
   const visibleJourneys = baseJourneys.flatMap((journey, index) => {
     const ratedHistory = ratedHistories[index];
     if (!ratedHistory) return [];
-    const recalculatedRatings = [ratedHistory.delayStars, ratedHistory.chaosStars, ratedHistory.disasterStars, ratedHistory.cancellationStars];
+    const recalculatedRatings = [ratedHistory.delayStars, ratedHistory.durationStars, ratedHistory.chaosStars, ratedHistory.disasterStars, ratedHistory.cancellationStars];
     if (!recalculatedRatings.every((rating): rating is number => typeof rating === "number" && Number.isFinite(rating))) return [];
     const totalStars = recalculatedRatings.reduce((total, rating) => total + rating, 0);
     if (!validStarRange || !validDelayRange || totalStars < minimumStarValue || totalStars > maximumStarValue) return [];
@@ -606,10 +609,10 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
       </select>
       <div className="admin-star-filter">
         <label className="checkbox-field"><input type="checkbox" checked={onlyJourneysWithGameName} onChange={(event) => onOnlyJourneysWithGameNameChange(event.target.checked)} /> Only journeys with game name</label>
-        <label className="field-label" htmlFor="minimum-stars">RPG star range <output>{minimumStars}–{maximumStars} / 20</output></label>
+        <label className="field-label" htmlFor="minimum-stars">RPG star range <output>{minimumStars}–{maximumStars} / 25</output></label>
         <div className="admin-star-filter__range">
-          <input id="minimum-stars" className="admin-star-filter__range-min" aria-label="Minimum RPG stars" type="range" min="0" max="20" step="1" value={minimumStars} onChange={(event) => onMinimumStarsChange(event.target.value)} />
-          <input id="maximum-stars" className="admin-star-filter__range-max" aria-label="Maximum RPG stars" type="range" min="0" max="20" step="1" value={maximumStars} onChange={(event) => onMaximumStarsChange(event.target.value)} />
+          <input id="minimum-stars" className="admin-star-filter__range-min" aria-label="Minimum RPG stars" type="range" min="0" max="25" step="1" value={minimumStars} onChange={(event) => onMinimumStarsChange(event.target.value)} />
+          <input id="maximum-stars" className="admin-star-filter__range-max" aria-label="Maximum RPG stars" type="range" min="0" max="25" step="1" value={maximumStars} onChange={(event) => onMaximumStarsChange(event.target.value)} />
         </div>
         <label className="field-label" htmlFor="minimum-delay-minutes">Delay range <output>{minimumDelayMinutes}–{maximumDelayMinutes} min</output></label>
         <div className="admin-star-filter__range">
@@ -687,6 +690,7 @@ function MapFitTrips({ points }: { points: Array<{ lat: number; lon: number }> }
     if (!points.length) return;
     const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
     map.fitBounds(bounds, { padding: [24, 24], maxZoom: 9, animate: false });
+    map.setZoom(Math.min(map.getZoom() + mapZoomBoost, 18), { animate: false });
   }, [map, boundsKey]);
   return null;
 }
@@ -730,6 +734,7 @@ function MapSelectedLineHandler({ points, selectedTrainId }: { points: Array<{ l
   useEffect(() => {
     if (!selectedTrainId || !points.length) return;
     const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
+    map.once("moveend", () => map.setZoom(Math.min(map.getZoom() + mapZoomBoost, 18), { animate: true }));
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
   }, [map, pointsKey, selectedTrainId]);
   return null;
@@ -780,9 +785,22 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
   const routes = journeys.map((journey) => {
     const live = liveEntries.find((train) => train.trainId === journey.id);
     const geometry = live?.geometry ?? journey.geometry;
-    const routeJson = live?.routeJson ?? journey.routeJson;
     let endpoints: Array<{ lat: number; lon: number }> = [];
-    try { endpoints = JSON.parse(routeJson ?? "[]") as Array<{ lat: number; lon: number }>; } catch { /* ignore malformed endpoints */ }
+    const endpointJson = live?.routeJson ?? journey.routeJson;
+    try {
+      const parsed = JSON.parse(endpointJson ?? "[]") as unknown;
+      endpoints = Array.isArray(parsed)
+        ? parsed.filter((point): point is { lat: number; lon: number } => Boolean(point && typeof point === "object" && typeof (point as { lat?: unknown }).lat === "number" && typeof (point as { lon?: unknown }).lon === "number"))
+        : [];
+    } catch { /* ignore malformed endpoints */ }
+    if (endpoints.length < 2 && live?.routeJson && live.routeJson !== journey.routeJson) {
+      try {
+        const parsed = JSON.parse(journey.routeJson ?? "[]") as unknown;
+        endpoints = Array.isArray(parsed)
+          ? parsed.filter((point): point is { lat: number; lon: number } => Boolean(point && typeof point === "object" && typeof (point as { lat?: unknown }).lat === "number" && typeof (point as { lon?: unknown }).lon === "number"))
+          : [];
+      } catch { /* ignore malformed fallback endpoints */ }
+    }
     let encoded: string[] = [];
     try { encoded = JSON.parse(geometry ?? "[]") as string[]; } catch { if (geometry) encoded = [geometry]; }
     const points = encoded.flatMap(decodePolyline);
@@ -795,7 +813,7 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
   const center: LatLngExpression = allPoints.length ? [allPoints[0].lat, allPoints[0].lon] : [51.3, 10.4];
   const selectedRoute = routes.find((route) => route.journey.id === selectedTrainId);
 
-  return <MapContainer className="train-map" center={center} zoom={8} scrollWheelZoom={false}>
+  return <MapContainer className="train-map" center={center} zoom={8} zoomSnap={0.1} zoomDelta={0.1} scrollWheelZoom={false}>
     <MapResizeHandler />
     <MapSelectedTrainPanes />
     <MapFitTrips points={allPoints} />
@@ -833,9 +851,7 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
       const lineName = journey.lineName ?? journey.displayName.match(/^([^\s(]+(?:\s*\d+[A-Z]?))/i)?.[1] ?? journey.displayName;
       const gameEmoji = gameNameEmoji(journey.history?.lineGameName);
       const safeDisplayName = `${gameEmoji ? `${gameEmoji} ` : ""}${lineName}`.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
-      const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` · ${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min`;
-      const labelState = cancelled ? " · CANCELLED · WINNER" : isLeading ? " · LEADING" : "";
-      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label ds-train-label ds-train-label--compact ${cancelled ? "is-cancelled" : ""}" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}${labelState}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
+      const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label ds-train-label ds-train-label--compact ${cancelled ? "is-cancelled" : ""}" style="--train-marker-color:${markerColor}">${gameEmoji ?? "🚆"}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });
       return <Fragment key={journey.id}>
         <Polyline pane={selected ? "selectedTrainPane" : "overlayPane"} positions={positions} pathOptions={{ color: lineColor, weight: selected || isMine || isLeading ? 6 : 3, opacity: selected || isMine || isLeading ? 1 : 0.85, dashArray: cancelled ? "8 8" : undefined }} eventHandlers={{ click: (event) => { event.target.bringToFront(); onSelect(journey.id); } }}>
           <Popup>{journey.displayName}: {journey.origin} → {journey.destination}</Popup>

@@ -57,4 +57,9 @@ describe("history ratings", () => {
     expect(rated[0]).toMatchObject({ delayStars: null, chaosStars: 5, disasterStars: 5, cancellationStars: 5 });
     expect(rated[1]).toBeNull();
   });
+
+  it("rates journey duration alongside the historical metrics", () => {
+    const rated = applyHistoryRatings([history({}), history({}), history({})], [1800, 3600, 5400]);
+    expect(rated.map((item) => item?.durationStars)).toEqual([2, 4, 5]);
+  });
 });

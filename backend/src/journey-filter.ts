@@ -58,8 +58,8 @@ export function normalizeCandidate(stopTime: MotisStopTime, stopId: string, star
     originStopId: stopTime.tripFrom?.stopId ?? stopId,
     realtime: stopTime.realTime === true,
     routeJson: JSON.stringify([stopTime.place, ...(stopTime.nextStops ?? [])]
-      .filter((place): place is MotisPlace => place !== undefined && Number.isFinite(place.lat) && Number.isFinite(place.lon))
-      .map((place) => ({ lat: place.lat, lon: place.lon, name: place.name }))),
+      .filter((place): place is MotisPlace => place !== undefined && (typeof place.name === "string" || typeof place.scheduledArrival === "string" || typeof place.scheduledDeparture === "string"))
+      .map((place) => ({ lat: place.lat, lon: place.lon, name: place.name, scheduledArrival: place.scheduledArrival, scheduledDeparture: place.scheduledDeparture }))),
     status: exclusionReason ? "excluded" : "candidate", exclusionReason,
   };
 }

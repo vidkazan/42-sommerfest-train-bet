@@ -29,7 +29,12 @@ export type LiveTripResult = {
   geometry: string | null;
   endpoints: string | null;
   alerts: TransitAlert[];
+  intermediateStops?: Array<{ name?: string; scheduledArrival?: string; scheduledDeparture?: string }>;
+  stops?: LiveTripStop[];
+  routeJson?: string | null;
 };
+
+export type LiveTripStop = { name?: string; scheduledArrival?: string; scheduledDeparture?: string; actualArrival?: string; actualDeparture?: string };
 
 export type TransitAlert = {
   title: string;
@@ -74,7 +79,7 @@ type MotisResponse = Array<{
 }> };
 
 type LiveAlert = { headerText?: string; descriptionText?: string; severityLevel?: string; cause?: string; effect?: string };
-type LiveStop = { arrival?: string; departure?: string; scheduledArrival?: string; scheduledDeparture?: string; alerts?: LiveAlert[] };
+type LiveStop = { name?: string; arrival?: string; departure?: string; scheduledArrival?: string; scheduledDeparture?: string; alerts?: LiveAlert[] };
 type LiveTrip = { legs?: Array<{
   from?: { name?: string; lat?: number; lon?: number; scheduledDeparture?: string; departure?: string; alerts?: LiveAlert[] };
   to?: { name?: string; lat?: number; lon?: number; arrival?: string; scheduledArrival?: string; alerts?: LiveAlert[] };
@@ -207,6 +212,11 @@ export const createMotisDataSource = (options: {
       const arrived = arrival !== null && Number.isFinite(Date.parse(arrival)) && Date.parse(arrival) <= Date.now();
       const geometry = trip.legs?.map((leg) => leg.legGeometry?.points).filter((points): points is string => Boolean(points)) ?? [];
       const firstLeg = trip.legs?.[0];
+      const stops: LiveTripStop[] = [
+        ...(firstLeg?.from ? [{ name: firstLeg.from.name, scheduledDeparture: firstLeg.from.scheduledDeparture, actualDeparture: firstLeg.from.departure }] : []),
+        ...(trip.legs ?? []).flatMap((leg) => leg.intermediateStops ?? []).map((stop) => ({ name: stop.name, scheduledArrival: stop.scheduledArrival, scheduledDeparture: stop.scheduledDeparture, actualArrival: stop.arrival, actualDeparture: stop.departure })),
+        ...(finalLeg?.to ? [{ name: finalLeg.to.name, scheduledArrival: finalLeg.to.scheduledArrival, actualArrival: finalLeg.to.arrival }] : []),
+      ];
       const endpoints = firstLeg?.from && finalLeg?.to
         ? JSON.stringify([{ name: firstLeg.from.name, lat: firstLeg.from.lat, lon: firstLeg.from.lon }, { name: finalLeg.to.name, lat: finalLeg.to.lat, lon: finalLeg.to.lon }])
         : null;
@@ -240,6 +250,9 @@ export const createMotisDataSource = (options: {
         geometry: geometry.length ? JSON.stringify(geometry) : null,
         endpoints,
         alerts: normalizeMotisAlerts(trip),
+        intermediateStops: (trip.legs ?? []).flatMap((leg) => leg.intermediateStops ?? []).map((stop) => ({ name: stop.name, scheduledArrival: stop.scheduledArrival, scheduledDeparture: stop.scheduledDeparture })),
+        stops,
+        routeJson: stops.length > 1 ? JSON.stringify(stops) : null,
       };
     },
   };

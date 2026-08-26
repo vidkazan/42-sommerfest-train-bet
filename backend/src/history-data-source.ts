@@ -17,6 +17,7 @@ export type TrainHistory = {
   p90DelayMinutes: number | null;
   chaosSpreadMinutes: number | null;
   delayVariance: number | null;
+  durationStars?: number | null;
   comebackPercentage: number | null;
   snowballPercentage: number | null;
   recoverySpeedMinutesPerStop: number | null;

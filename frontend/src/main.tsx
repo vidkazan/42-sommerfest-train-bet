@@ -93,7 +93,7 @@ function App() {
   const [selectedJourneyIds, setSelectedJourneyIds] = useState<string[]>([]);
   const [minimumJourneyDuration, setMinimumJourneyDuration] = useState("0");
   const [minimumJourneyStars, setMinimumJourneyStars] = useState("0");
-  const [maximumJourneyStars, setMaximumJourneyStars] = useState("20");
+  const [maximumJourneyStars, setMaximumJourneyStars] = useState("25");
   const [minimumDelayMinutes, setMinimumDelayMinutes] = useState("0");
   const [maximumDelayMinutes, setMaximumDelayMinutes] = useState("60");
   const [onlyJourneysWithGameName, setOnlyJourneysWithGameName] = useState(false);
@@ -117,6 +117,7 @@ function App() {
   const [username, setUsername] = useState("");
   const [selectedTrainId, setSelectedTrainId] = useState<string | null>(null);
   const [betSubmitted, setBetSubmitted] = useState(false);
+  const [hasConfirmedBet, setHasConfirmedBet] = useState(false);
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
   const [usernameCheckLoading, setUsernameCheckLoading] = useState(false);
@@ -127,6 +128,7 @@ function App() {
   const [leaderboardStale, setLeaderboardStale] = useState(false);
   const [nextProgressUpdateAt, setNextProgressUpdateAt] = useState<number | null>(null);
   const [progressUpdating, setProgressUpdating] = useState(false);
+  const [adminNextUpdateAt, setAdminNextUpdateAt] = useState<number | null>(null);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; trains: unknown[] } | null>(null);
 
@@ -221,18 +223,21 @@ function App() {
         if (participant.participantId !== saved.userId || !participant.hasBet) throw new Error("stale identity");
         setSelectedTrainId(participant.trainId);
         setBetSubmitted(true);
+        setHasConfirmedBet(true);
         setPublicView("progress");
       }).catch(() => {
         localStorage.removeItem("trainbet_user");
         setStoredUserId(null);
+        setHasConfirmedBet(false);
       });
     } catch {
       localStorage.removeItem("trainbet_user");
+      setHasConfirmedBet(false);
     }
   }, [mode, publicGameId]);
 
   useEffect(() => {
-    if (mode !== "public" || (!betSubmitted && !bettingClosed)) return;
+    if (mode !== "public" || (!hasConfirmedBet && !bettingClosed)) return;
     let active = true;
     let timer: number | null = null;
     const refreshIntervalMs = 60_000;
@@ -254,7 +259,7 @@ function App() {
     setNextProgressUpdateAt(Date.now() + refreshIntervalMs);
     void loadProgress();
     return () => { active = false; setProgressUpdating(false); if (timer !== null) window.clearTimeout(timer); };
-  }, [mode, betSubmitted, bettingClosed, publicGameId]);
+  }, [mode, hasConfirmedBet, bettingClosed, publicGameId]);
 
   useEffect(() => {
     if (!adminToken) return;
@@ -270,6 +275,7 @@ function App() {
         const next = await api.getAdminDashboard(adminDashboard.game.id, adminToken);
         if (active) setAdminDashboard(next);
       } catch { /* keep the last dashboard snapshot visible */ }
+      if (active) setAdminNextUpdateAt(Date.now() + 60_000);
     };
     const timer = window.setInterval(refreshDashboard, 60_000);
     return () => { active = false; window.clearInterval(timer); };
@@ -282,6 +288,7 @@ function App() {
     try {
       const dashboard = await api.getAdminDashboard(gameToShow.id, adminToken);
       setAdminDashboard(dashboard);
+      setAdminNextUpdateAt(Date.now() + 60_000);
       setAdminView("dashboard");
     } catch (reason: unknown) {
       setAdminError(reason instanceof Error ? reason.message : "Could not load dashboard");
@@ -326,7 +333,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (mode !== "public" || (!betSubmitted && !bettingClosed)) return;
+    if (mode !== "public" || (!hasConfirmedBet && !bettingClosed)) return;
     let active = true;
     const loadResults = async () => {
       try { const next = await api.getResults(publicGameId ?? ""); if (active) setResults(next); } catch { /* retain last result */ }
@@ -334,7 +341,7 @@ function App() {
     void loadResults();
     const timer = window.setInterval(loadResults, 60_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [mode, betSubmitted, bettingClosed, publicGameId]);
+  }, [mode, hasConfirmedBet, bettingClosed, publicGameId]);
 
   const submitBet = async () => {
     if (!selectedTrainId || !username.trim()) return;
@@ -346,6 +353,7 @@ function App() {
       localStorage.setItem("trainbet_user", JSON.stringify({ gameId: publicGameId, userId: participant.participantId, nickname: participant.username }));
       setStoredUserId(participant.participantId);
       setBetSubmitted(true);
+      setHasConfirmedBet(true);
       setPublicView("progress");
     } catch (reason: unknown) {
       setBetError(reason instanceof Error ? reason.message : "Could not submit bet");
@@ -523,7 +531,7 @@ function App() {
 
   if (mode === "admin") {
     if (adminView === "dashboard" && adminDashboard) {
-      return <main className="admin-dashboard-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><AdminDashboardView key={adminDashboard.game?.id ?? "dashboard"} dashboard={adminDashboard} /></main>;
+      return <main className="admin-dashboard-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><AdminDashboardView key={adminDashboard.game?.id ?? "dashboard"} dashboard={adminDashboard} nextUpdateAt={adminNextUpdateAt} /></main>;
     }
     return (
       <main className="app-shell">
@@ -548,7 +556,7 @@ function App() {
     );
   }
 
-  const liveStateVisible = betSubmitted || bettingClosed;
+  const liveStateVisible = hasConfirmedBet || bettingClosed;
   const bettedEntries = leaderboard.filter((entry) => entry.bettors.length > 0);
   const bettedTrainIds = new Set(bettedEntries.map((entry) => entry.trainId));
   const liveJourneys = liveStateVisible ? journeys.filter((journey) => bettedTrainIds.has(journey.id)) : journeys;
@@ -575,14 +583,14 @@ function App() {
         <nav className="view-tabs" aria-label="Game views">
           {canShowRace && <BadgeButton type="button" className={`ds-text-medium ${publicView === "race" ? "active" : ""}`.trim()} onClick={() => setPublicView("race")}>Race</BadgeButton>}
           {!betSubmitted && !bettingClosed && <BadgeButton type="button" className={`ds-text-medium ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
-          {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
-          {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
-          {betSubmitted && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
+          {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
+          {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
+          {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
           <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>
         </nav>
-        {betSubmitted && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
-        {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} nextUpdateAt={nextProgressUpdateAt} updating={progressUpdating} onSelectTrain={selectTrain} />}
-        {betSubmitted && publicView === "leaderboard" && !loading && !error && <LeaderboardView
+        {hasConfirmedBet && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
+        {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} nextUpdateAt={nextProgressUpdateAt} updating={progressUpdating} onSelectTrain={selectTrain} onOpenBets={() => setPublicView("leaderboard")} />}
+        {hasConfirmedBet && publicView === "leaderboard" && !loading && !error && <LeaderboardView
           entries={bettedEntries}
           journeys={journeys}
           currentParticipantId={storedUserId}
@@ -596,7 +604,7 @@ function App() {
           myBetPlace={bettedEntries.find((entry) => entry.trainId === myTrainId)?.position ?? null}
           myBetWon={Boolean(results?.winners.some((winner) => winner.trainId === myTrainId))}
         />}
-        {betSubmitted && publicView === "events" && !loading && !error && <LiveEventsView myTrainId={myTrainId} events={bettedLiveEvents} entries={bettedEntries} journeys={journeys} onSelectTrain={selectTrain} />}
+        {hasConfirmedBet && publicView === "events" && !loading && !error && <LiveEventsView myTrainId={myTrainId} events={bettedLiveEvents} entries={bettedEntries} journeys={journeys} onSelectTrain={selectTrain} />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}

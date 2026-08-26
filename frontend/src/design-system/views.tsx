@@ -4,7 +4,7 @@ import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap 
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
 import type { AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
-import { Badge, BadgeButton, Button, DelayBadge, Notice, StatusBadge, TrainIcon } from "./components";
+import { Badge, BadgeButton, Button, DelayBadge, Notice, ReplayBadge, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 import { trainColor } from "./trainColors";
@@ -32,7 +32,7 @@ export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null
 export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
 export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; entries: LiveLeaderboardEntry[]; journeys: Journey[]; onSelectTrain: (trainId: string) => void };
 export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
-export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; nextUpdateAt?: number | null; updating?: boolean; onSelectTrain?: (trainId: string) => void; onOpenBets?: () => void };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; nextUpdateAt?: number | null; updating?: boolean; replayEntries?: LiveLeaderboardEntry[]; replayTimestamp?: number; onSelectTrain?: (trainId: string) => void; onOpenBets?: () => void };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
 export type AdminGameListViewProps = { games: Game[]; loading: boolean; error: string | null; message: string | null; onDelete: (game: Game) => void; onContinue: (game: Game) => void; onDashboard: (game: Game) => void; onPopulateBets: (game: Game) => void };
@@ -65,19 +65,20 @@ export function CountdownBadge({ label, target, variant = "blue" }: { label: str
   return <Badge variant={variant} className="admin-dashboard__countdown">{label} {value}</Badge>;
 }
 
-export function AdminDashboardView({ dashboard, nextUpdateAt }: { dashboard: AdminDashboard; nextUpdateAt?: number | null }) {
+export function AdminDashboardView({ dashboard, nextUpdateAt, replayEntries, replayTimestamp, replayActive = false, onStartReplay, onSkipReplay }: { dashboard: AdminDashboard; nextUpdateAt?: number | null; replayEntries?: AdminDashboard["entries"]; replayTimestamp?: number; replayActive?: boolean; onStartReplay: () => void; onSkipReplay: () => void }) {
   const finished = dashboard.state === "finished";
   const countdownLabel = dashboard.state === "waiting" ? "Starts in" : "Ends in";
   const countdownTarget = dashboard.state === "waiting" ? dashboard.game?.journeyDepartureStart : dashboard.game?.gameEndTime;
-  const totalBets = dashboard.entries.reduce((total, entry) => total + entry.betCount, 0);
-  const stageEntries = dashboard.entries.map((entry) => ({ ...entry, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes }));
+  const visibleEntries = replayEntries ?? dashboard.entries;
+  const totalBets = visibleEntries.reduce((total, entry) => total + entry.betCount, 0);
+  const stageEntries = visibleEntries.map((entry) => ({ ...entry, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes }));
   return <section className="admin-dashboard" aria-label="Race dashboard">
     <header className="admin-dashboard__header">
       <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
-      <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
+      <div className="admin-dashboard__header-status">{onStartReplay ? <ReplayBadge active={replayActive} replayTimestamp={replayTimestamp} onReplay={onStartReplay} onSkip={onSkipReplay} /> : finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
     </header>
     <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} 🎲</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
-    <RaceStage entries={stageEntries} final={finished} />
+    <RaceStage entries={stageEntries} final={finished} referenceTime={replayTimestamp} animationDurationMs={replayEntries ? 800 : 4_000} />
   </section>;
 }
 
@@ -336,7 +337,7 @@ export function LiveEventsView({ myTrainId, events, entries, journeys, onSelectT
   </section>;
 }
 
-export function RaceChartView({ entries, journeys, currentParticipantId, final = false, nextUpdateAt = null, updating = false, onSelectTrain, onOpenBets }: RaceChartViewProps) {
+export function RaceChartView({ entries, journeys, currentParticipantId, final = false, nextUpdateAt = null, updating = false, replayEntries, replayTimestamp, onSelectTrain, onOpenBets }: RaceChartViewProps) {
   const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
@@ -370,7 +371,8 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [final, nextUpdateAt]);
-  const stageEntries = entries.map((entry) => ({
+  const visibleEntries = replayEntries ?? entries;
+  const stageEntries = visibleEntries.map((entry) => ({
     trainId: entry.trainId,
     displayName: entry.displayName,
     gameName: journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName,
@@ -390,7 +392,7 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
   const secondsUntilUpdate = nextUpdateAt ? Math.max(0, Math.ceil((nextUpdateAt - now) / 1_000)) : null;
   return <section className="race-chart-view" aria-label="Delay race">
     <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div>{!final && <Badge variant="secondary" className="race-chart__next-update" aria-label={updating ? "Updating live race data" : secondsUntilUpdate === null ? "Waiting for the next live race update" : `Next live race update in ${secondsUntilUpdate} seconds`}>{updating ? "Updating…" : secondsUntilUpdate === null ? "Waiting for update" : `Next update in ${secondsUntilUpdate}s`}</Badge>}</header>
-    <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} onOpenBets={onOpenBets} />
+    <RaceStage entries={stageEntries} final={final} referenceTime={replayTimestamp} animationDurationMs={replayEntries ? 800 : 4_000} showBetCount={false} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} onOpenBets={onOpenBets} />
     {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="race-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
       <section className="train-detail-dialog__panel">
         <header className="train-detail-dialog__header">

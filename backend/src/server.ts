@@ -29,6 +29,7 @@ app.addHook("onResponse", async (request, reply) => {
   log.call(request.log, { method: request.method, url: request.url, statusCode }, "Request completed");
 });
 const transitUserAgent = "42SommerfestTrainBet/0.1";
+const delaySnapshotRetentionMs = 24 * 60 * 60_000;
 const berlinDefaultSchedule = () => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Berlin", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
@@ -880,7 +881,7 @@ const getAdminDashboardSnapshot = (gameId?: string) => {
     ORDER BY scheduled_departure ASC
   `).all(game.id, game.id) as Array<{ trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; liveError: string | null; raceColor: string | null; routeJson: string | null; betCount: number }>;
   const snapshotRows = db.prepare(`SELECT journey_id AS journeyId, delay_minutes AS delayMinutes, recorded_at AS recordedAt
-    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - 30 * 60_000).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
+    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - delaySnapshotRetentionMs).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
   const snapshotsByJourney = new Map<string, Array<{ delayMinutes: number; recordedAt: string }>>();
   for (const snapshot of snapshotRows) {
     const history = snapshotsByJourney.get(snapshot.journeyId) ?? [];
@@ -1106,7 +1107,7 @@ const refreshGameProgress = async (game: GameRow) => {
         addLiveEvent(game.id, "game_finished", { title: "The delay race is finished", message: "Every train has crossed the finish line. Time to count the damage.", severity: "info", source: "generated" }, `${game.id}:game_finished`, fetchedAt);
       }
     }
-    db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - 30 * 60_000).toISOString());
+    db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - delaySnapshotRetentionMs).toISOString());
   })();
 };
 
@@ -1177,7 +1178,7 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id, game.id) as Array<{ participantId: string | null; username: string | null; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; raceColor: string | null; routeJson: string | null }>;
   const snapshotRows = db.prepare(`SELECT journey_id AS journeyId, delay_minutes AS delayMinutes, recorded_at AS recordedAt
-    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - 30 * 60_000).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
+    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - delaySnapshotRetentionMs).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
   const snapshotsByJourney = new Map<string, Array<{ delayMinutes: number; recordedAt: string }>>();
   for (const snapshot of snapshotRows) {
     const history = snapshotsByJourney.get(snapshot.journeyId) ?? [];

@@ -50,7 +50,7 @@ function snapshotAtOrBefore(history: RaceStageEntry["delayHistory"], cutoff: num
   return candidates[candidates.length - 1];
 }
 
-type RaceVisualState = { order: string[]; delays: Record<string, number | null> };
+type RaceVisualState = { order: string[]; delays: Record<string, number | null>; positions: Record<string, number> };
 
 function currentDelay(entry: RaceStageEntry, final: boolean) {
   return final ? entry.finalDelayMinutes ?? null : entry.raceDelayMinutes;
@@ -79,14 +79,16 @@ function sortVisualIds(ids: string[], delays: Record<string, number | null>, ent
 
 function interpolateDelay(from: number | null, to: number | null, progress: number) {
   if (progress >= 1) return to;
-  return (from ?? 0) + ((to ?? 0) - (from ?? 0)) * progress;
+  if (from === null || to === null) return from ?? to;
+  return from + (to - from) * progress;
 }
 
-export function RaceStage({ entries, final = false, className = "", onSelectTrain, onOpenTrain, onOpenBets }: { entries: RaceStageEntry[]; final?: boolean; className?: string; onSelectTrain?: (trainId: string) => void; onOpenTrain?: (trainId: string) => void; onOpenBets?: () => void }) {
+export function RaceStage({ entries, final = false, className = "", referenceTime, animationDurationMs = 800, showBetCount = true, onSelectTrain, onOpenTrain, onOpenBets }: { entries: RaceStageEntry[]; final?: boolean; className?: string; referenceTime?: number; animationDurationMs?: number; showBetCount?: boolean; onSelectTrain?: (trainId: string) => void; onOpenTrain?: (trainId: string) => void; onOpenBets?: () => void }) {
   const [visualState, setVisualState] = useState<RaceVisualState>(() => {
     const delays = Object.fromEntries(entries.map((entry) => [entry.trainId, currentDelay(entry, final)]));
     const entriesById = new Map(entries.map((entry) => [entry.trainId, entry]));
-    return { delays, order: sortVisualIds(entries.map((entry) => entry.trainId), delays, entriesById, entries.map((entry) => entry.trainId)) };
+    const order = sortVisualIds(entries.map((entry) => entry.trainId), delays, entriesById, entries.map((entry) => entry.trainId));
+    return { delays, order, positions: Object.fromEntries(order.map((id, index) => [id, index])) };
   });
   const animationFrame = useRef<number | null>(null);
   useEffect(() => {
@@ -98,21 +100,25 @@ export function RaceStage({ entries, final = false, className = "", onSelectTrai
     const from = Object.fromEntries(ids.map((id) => [id, Object.prototype.hasOwnProperty.call(visualState.delays, id) ? visualState.delays[id] : currentDelay(entriesById.get(id)!, final)]));
     const to = Object.fromEntries(entries.map((entry) => [entry.trainId, currentDelay(entry, final)]));
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const settle = () => setVisualState({ order: sortVisualIds(ids, to, entriesById, order), delays: to });
+    const targetOrder = sortVisualIds(ids, to, entriesById, order);
+    const targetPositions = Object.fromEntries(targetOrder.map((id, index) => [id, index]));
+    const fromPositions = Object.fromEntries(ids.map((id) => [id, visualState.positions[id] ?? targetPositions[id] ?? 0]));
+    const settle = () => setVisualState({ order: targetOrder, delays: to, positions: targetPositions });
     if (final || reduceMotion) { settle(); return; }
     const startedAt = performance.now();
-    const duration = 4_000;
+    const duration = animationDurationMs;
     const animate = (timestamp: number) => {
       const linearProgress = Math.min(1, (timestamp - startedAt) / duration);
-      const progress = 1 - (1 - linearProgress) ** 3;
+      const progress = linearProgress < 0.5 ? 4 * linearProgress ** 3 : 1 - ((-2 * linearProgress + 2) ** 3) / 2;
       const delays = Object.fromEntries(ids.map((id) => [id, interpolateDelay(from[id], to[id], progress)]));
-      setVisualState({ order: sortVisualIds(ids, delays, entriesById, order), delays });
+      const positions = Object.fromEntries(ids.map((id) => [id, fromPositions[id] + ((targetPositions[id] ?? fromPositions[id]) - fromPositions[id]) * progress]));
+      setVisualState({ order: targetOrder, delays, positions });
       if (linearProgress < 1) animationFrame.current = requestAnimationFrame(animate);
       else animationFrame.current = null;
     };
     animationFrame.current = requestAnimationFrame(animate);
     return () => { if (animationFrame.current !== null) cancelAnimationFrame(animationFrame.current); };
-  }, [entries, final]);
+  }, [entries, final, animationDurationMs]);
   const entriesById = new Map(entries.map((entry) => [entry.trainId, entry]));
   const sortedEntries = visualState.order.map((id) => entriesById.get(id)).filter((entry): entry is RaceStageEntry => entry !== undefined);
   const maxDelay = Math.max(0, ...sortedEntries.map((entry) => Math.max(0, (final ? entry.finalDelayMinutes : entry.raceDelayMinutes) ?? 0)));
@@ -126,6 +132,7 @@ export function RaceStage({ entries, final = false, className = "", onSelectTrai
   useEffect(() => {
     if (maxDelay >= axisMax) setAxisMax(Math.max(10, Math.ceil((maxDelay + 5) / 5) * 5));
   }, [axisMax, maxDelay]);
+  const displayNow = referenceTime ?? now;
   const axisTicks = Array.from({ length: Math.floor(axisMax / 5) + 1 }, (_, index) => index * 5);
   const currentRankByTrainId = new Map<string, number>();
   let previousDelay: number | null | undefined;
@@ -136,7 +143,7 @@ export function RaceStage({ entries, final = false, className = "", onSelectTrai
     const rank = previousDelay === delay ? previousRank : index + 1;
     currentRankByTrainId.set(entry.trainId, rank); previousDelay = delay; previousRank = rank;
   });
-  const fiveMinuteCutoff = now - 5 * 60_000;
+  const fiveMinuteCutoff = displayNow - 5 * 60_000;
   const previousRankedEntries = !final ? [...sortedEntries]
     .map((entry) => ({ entry, snapshot: snapshotAtOrBefore(entry.delayHistory, fiveMinuteCutoff) }))
     .filter((item): item is { entry: RaceStageEntry; snapshot: NonNullable<RaceStageEntry["delayHistory"]>[number] } => !item.entry.cancelled && item.entry.status !== "cancelled" && item.entry.raceDelayMinutes !== null && item.snapshot !== undefined)
@@ -161,8 +168,8 @@ export function RaceStage({ entries, final = false, className = "", onSelectTrai
         const changeMinutes = trendStart === null || delay === null ? null : Math.round((delay - trendStart) * 10) / 10;
         const cancelled = entry.cancelled || entry.status === "cancelled";
         const medal = cancelled ? "🥇" : currentRankByTrainId.get(entry.trainId) === 1 ? "🥇" : currentRankByTrainId.get(entry.trainId) === 2 ? "🥈" : currentRankByTrainId.get(entry.trainId) === 3 ? "🥉" : `${currentRankByTrainId.get(entry.trainId) ?? index + 1}`;
-        const remainingMinutes = entry.scheduledArrival ? Math.max(0, Math.ceil((Date.parse(entry.scheduledArrival) - now) / 60_000)) : null;
-        const departureMinutes = entry.scheduledDeparture ? Math.max(0, Math.ceil((Date.parse(entry.scheduledDeparture) - now) / 60_000)) : null;
+        const remainingMinutes = entry.scheduledArrival ? Math.max(0, Math.ceil((Date.parse(entry.scheduledArrival) - displayNow) / 60_000)) : null;
+        const departureMinutes = entry.scheduledDeparture ? Math.max(0, Math.ceil((Date.parse(entry.scheduledDeparture) - displayNow) / 60_000)) : null;
         const status = cancelled ? "CANCELLED · WINNER" : entry.status === "arrived" ? "Arrived" : entry.status === "in_progress" ? remainingMinutes === null ? "Finish time unavailable" : `Finish in ${remainingMinutes} min` : entry.stale ? "Live data stale" : departureMinutes === null ? "Waiting for departure" : `Departure in ${departureMinutes} min`;
         const arrived = entry.status === "arrived";
         const trendLabel = changeMinutes !== null && changeMinutes !== 0 ? `${changeMinutes > 0 ? "+" : "−"}${Math.abs(changeMinutes)} min in last 5 min` : null;
@@ -172,11 +179,12 @@ export function RaceStage({ entries, final = false, className = "", onSelectTrai
         const rankMovementLabel = currentRank !== undefined ? previousRank === undefined ? "→" : rankMovement > 0 ? `↑${rankMovement}` : rankMovement < 0 ? `↓${Math.abs(rankMovement)}` : "→" : null;
         const rankMovementDescription = rankMovement > 0 ? `Moved up ${rankMovement} ${rankMovement === 1 ? "place" : "places"}` : rankMovement < 0 ? `Moved down ${Math.abs(rankMovement)} ${Math.abs(rankMovement) === 1 ? "place" : "places"}` : "No recent rank movement";
         const betLabel = `${entry.betCount ?? 0} 🎲`;
-        const upcomingStation = !cancelled && entry.status !== "arrived" ? nextStation(entry.stops, entry.routeJson, now) : null;
-        return <article className={`admin-race-row ${index === 0 ? "admin-race-row--leader" : ""} ${arrived ? "admin-race-row--arrived" : ""} ${trendLabel ? "admin-race-row--has-trend" : ""} ${onSelectTrain ? "admin-race-row--selectable" : ""}`.trim()} key={entry.trainId} style={{ transform: `translateY(calc(${index} * var(--race-row-height)))` }} onClick={() => onSelectTrain?.(entry.trainId)} onKeyDown={(event) => { if (onSelectTrain && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelectTrain(entry.trainId); } }} role={onSelectTrain ? "button" : undefined} tabIndex={onSelectTrain ? 0 : undefined}>
-          <div className="admin-race-row__identity"><span className="admin-race-row__rank">{medal}</span>{rankMovementLabel && <span className={`admin-race-row__rank-movement ${rankMovement > 0 ? "is-up" : rankMovement < 0 ? "is-down" : "is-steady"}`} aria-label={rankMovementDescription} title={rankMovementDescription}>{rankMovementLabel}</span>}{entry.betCount !== undefined && <span onClick={(event) => event.stopPropagation()}><Badge variant="secondary" className="admin-race-row__bet-count" onClick={onOpenBets ? () => onOpenBets() : undefined}>{betLabel}</Badge></span>}{entry.isMine && <Badge variant="blue" className="admin-race-row__mine">My</Badge>}{onOpenTrain ? <TrainLabelButton label={entry.displayName} gameName={entry.gameName} trainId={entry.trainId} raceColor={entry.raceColor} cancelled={cancelled} onClick={() => onOpenTrain(entry.trainId)} /> : <TrainLabel label={entry.displayName} gameName={entry.gameName} trainId={entry.trainId} raceColor={entry.raceColor} size="compact" cancelled={cancelled} />}{upcomingStation && <span className="admin-race-row__destination" title={`Next station: ${upcomingStation}`}>→ {upcomingStation}</span>}</div>
+        const upcomingStation = !cancelled && entry.status !== "arrived" ? nextStation(entry.stops, entry.routeJson, displayNow) : null;
+        const position = visualState.positions[entry.trainId] ?? index;
+        return <article className={`admin-race-row ${position < 0.5 ? "admin-race-row--leader" : ""} ${arrived ? "admin-race-row--arrived" : ""} ${trendLabel ? "admin-race-row--has-trend" : ""} ${onSelectTrain ? "admin-race-row--selectable" : ""}`.trim()} key={entry.trainId} style={{ transform: `translateY(calc(${position} * var(--race-row-height)))` }} onClick={() => onSelectTrain?.(entry.trainId)} onKeyDown={(event) => { if (onSelectTrain && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelectTrain(entry.trainId); } }} role={onSelectTrain ? "button" : undefined} tabIndex={onSelectTrain ? 0 : undefined}>
+          <div className="admin-race-row__identity"><span className="admin-race-row__rank">{medal}</span>{rankMovementLabel && <span className={`admin-race-row__rank-movement ${rankMovement > 0 ? "is-up" : rankMovement < 0 ? "is-down" : "is-steady"}`} aria-label={rankMovementDescription} title={rankMovementDescription}>{rankMovementLabel}</span>}{showBetCount && entry.betCount !== undefined && <span onClick={(event) => event.stopPropagation()}><Badge variant="secondary" className="admin-race-row__bet-count" onClick={onOpenBets ? () => onOpenBets() : undefined}>{betLabel}</Badge></span>}{entry.isMine && <Badge variant="blue" className="admin-race-row__mine">My</Badge>}{onOpenTrain ? <TrainLabelButton label={entry.displayName} gameName={entry.gameName} trainId={entry.trainId} raceColor={entry.raceColor} cancelled={cancelled} onClick={() => onOpenTrain(entry.trainId)} /> : <TrainLabel label={entry.displayName} gameName={entry.gameName} trainId={entry.trainId} raceColor={entry.raceColor} size="compact" cancelled={cancelled} />}{upcomingStation && <span className="admin-race-row__destination" title={`Next station: ${upcomingStation}`}>→ {upcomingStation}</span>}</div>
           <div className="admin-race-row__track">{trendFrom !== null && trendTo !== null && trendChange !== 0 && <span className={`admin-race-row__trend ${trendChange > 0 ? "is-increasing" : "is-decreasing"}`} style={{ left: `${(Math.min(trendFrom, trendTo) / axisMax) * 100}%`, width: `${(Math.abs(trendChange) / axisMax) * 100}%` }} />}<span className="admin-race-row__bar" style={{ width: `${progress}%` }} />{cancelled ? <Badge variant="primary" className={`admin-race-row__value ${progress <= 3 ? "is-at-start" : progress >= 100 ? "is-at-end" : ""}`.trim()} style={{ left: `${progress}%` }}>WINNER</Badge> : <DelayBadge minutes={displayDelay} className={`admin-race-row__value ${progress <= 3 ? "is-at-start" : progress >= 100 ? "is-at-end" : ""}`.trim()} style={{ left: `${progress}%` }} />}</div>
-          {!final && <DelaySparkline history={entry.delayHistory} trainId={entry.trainId} trainLabel={entry.displayName} now={now} />}
+          {!final && <DelaySparkline history={entry.delayHistory} trainId={entry.trainId} trainLabel={entry.displayName} now={displayNow} />}
           <span className="admin-race-row__status"><span>{status}</span>{trendLabel && <span className={`admin-race-row__trend-label ${changeMinutes! > 0 ? "is-increasing" : "is-decreasing"}`}>{trendLabel}</span>}</span>
         </article>;
       })}

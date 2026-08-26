@@ -8,6 +8,11 @@ button:hover:not(:disabled) { filter: brightness(1.12); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ds-focus-ring); outline-offset: 2px; }
 .ds-button--secondary { background: var(--ds-surface-muted); color: var(--ds-text-primary); }
 .ds-badge { color: #fff; font-weight: 600; }
+.ds-replay-badge { align-items: center; color: var(--ds-text-primary); display: inline-flex; flex: 0 0 auto; gap: var(--ds-space-1); min-height: 2.5rem; padding: var(--ds-space-2) var(--ds-space-1) var(--ds-space-2) var(--ds-space-3); }
+.ds-replay-badge__launch { background: transparent; color: var(--ds-text-primary); font-size: inherit; padding: 0; }
+.ds-replay-badge__launch:hover:not(:disabled) { filter: none; text-decoration: underline; }
+.ds-replay-badge__close { align-items: center; background: transparent; border-radius: var(--ds-radius-pill); color: var(--ds-text-muted); display: inline-flex; font-size: var(--ds-font-medium); height: 1.5rem; justify-content: center; line-height: 1; padding: 0; width: 1.5rem; }
+.ds-replay-badge__close:hover:not(:disabled) { background: var(--ds-surface-muted); color: var(--ds-text-primary); filter: none; }
 .app-shell { display: grid; gap: var(--ds-space-4); margin: 0 auto; max-width: 1100px; min-width: 0; padding: var(--ds-space-4); }
 .brand-header { align-items: center; display: flex; gap: var(--ds-space-3); }
 .brand-header__logo { background: var(--ds-surface-muted); border-radius: var(--ds-radius-md); height: 3.5rem; object-fit: cover; width: 3.5rem; }
@@ -334,6 +339,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .results-winner-cell__bottom { gap: var(--ds-space-3); }
 .results-winner-cell__bettors { color: var(--ds-text-muted); font-size: var(--ds-font-medium); margin-top: var(--ds-space-2); }
 .view-tabs .ds-badge-button { align-items: center; background: var(--ds-surface-muted); border: 1px solid var(--ds-border); display: inline-flex; flex: 0 0 auto; height: 2.5rem; justify-content: center; margin: 0; min-width: auto; padding: 0 var(--ds-space-3); white-space: nowrap; }
+.view-tabs .ds-replay-badge { margin: 0; }
 .view-tabs .ds-badge-button.active { background: var(--ds-accent-blue); color: #fff; }
 .admin-dashboard-shell { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; padding: clamp(.75rem, 2vw, 2rem); }
 .admin-dashboard-shell > .brand-header { flex: 0 0 auto; }
@@ -381,7 +387,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .race-chart-view { padding: var(--ds-space-3); }
 .race-chart-view .race-chart__header { margin-bottom: var(--ds-space-3); }
 .race-stage--public .admin-race-row { padding: .1rem 0; }
-.admin-race-row { align-items: center; display: grid; gap: clamp(.35rem, 1vw, 1rem); grid-template-areas: "identity track sparkline status"; grid-template-columns: minmax(10rem, 22%) minmax(0, 1fr) minmax(3.75rem, 7%) minmax(9rem, 14%); height: var(--race-row-height); left: 0; padding: clamp(.2rem, .5vh, .45rem) 0; position: absolute; right: 0; transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+.admin-race-row { align-items: center; display: grid; gap: clamp(.35rem, 1vw, 1rem); grid-template-areas: "identity track sparkline status"; grid-template-columns: minmax(10rem, 22%) minmax(0, 1fr) minmax(3.75rem, 7%) minmax(9rem, 14%); height: var(--race-row-height); left: 0; padding: clamp(.2rem, .5vh, .45rem) 0; position: absolute; right: 0; transition: none; }
 .admin-race-row--selectable { cursor: pointer; }
 .admin-race-row--leader { filter: brightness(1.12); }
 .admin-race-row__identity { align-items: center; display: flex; gap: clamp(.35rem, .7vw, .75rem); grid-area: identity; min-width: 0; }

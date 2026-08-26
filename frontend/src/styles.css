@@ -371,7 +371,6 @@ button:disabled { cursor: wait; opacity: .6; }
 .admin-race-stage { --race-animation-duration: 4s; --race-row-height-base: clamp(3rem, 8vh, 5rem); --race-row-height: var(--race-row-height-base); flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
 .race-stage--public .admin-race-stage { flex: 0 0 auto; height: calc(var(--race-row-count) * var(--race-row-height)); min-height: 0; }
 .race-stage--public .admin-race-stage { --race-row-height-base: clamp(2.7rem, 5.5vh, 3.8rem); --race-row-height: var(--race-row-height-base); }
-.admin-race-stage:has(.admin-race-row--has-trend) { --race-row-height: calc(var(--race-row-height-base) * .75); }
 .race-stage--public .admin-race-row { position: absolute; }
 .race-stage--public .admin-race-row__identity { min-width: 0; overflow: visible; position: relative; z-index: 2; }
 .race-stage--public .admin-race-row__train-badge { display: block; max-width: calc(100% - 2.25rem); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -413,7 +412,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .admin-race-row__train-badge.is-cancelled { text-decoration: line-through; }
 .admin-race-row__track { align-items: center; background: color-mix(in srgb, var(--ds-border-subtle) 65%, transparent); border-radius: var(--ds-radius-pill); display: flex; grid-area: track; height: clamp(.6rem, 1.5vh, 1rem); min-width: 0; position: relative; }
 .admin-race-row__trend { border-radius: var(--ds-radius-pill); height: 100%; min-width: .15rem; position: absolute; top: 0; z-index: 1; }
-.admin-race-row__trend.is-increasing, .admin-race-row__trend.is-decreasing { transition: none; }
+.admin-race-row__trend.is-increasing, .admin-race-row__trend.is-decreasing { transition: none; will-change: left, width; }
 .admin-race-row__trend.is-increasing { background: #16a34a; }
 .admin-race-row__trend.is-decreasing { background: #dc2626; }
 .admin-race-row__bar { background: var(--ds-border-control); border-radius: var(--ds-radius-pill); height: 100%; min-width: 0; }
@@ -475,7 +474,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-stage--public .admin-race-axis__spacer { display: none; }
   .race-chart-view .race-stage--public .admin-race-axis__ticks { width: 100%; }
   .race-chart-view .race-stage--public .admin-race-stage { --race-row-height-base: 4.5rem; --race-row-height: 4.5rem; min-width: 0; }
-  .race-chart-view .race-stage--public .admin-race-stage:has(.admin-race-row--has-trend) { --race-row-height: 5.4rem; }
+  .race-chart-view .race-stage--public .admin-race-stage { --race-row-height: 5.4rem; }
   .race-chart-view .race-stage--public .admin-race-row { align-content: center; column-gap: var(--ds-space-2); grid-template-columns: minmax(0, 1fr) 3rem; grid-template-areas: "identity sparkline" "track track" "status status"; min-width: 0; padding: .35rem 0; row-gap: .2rem; }
   .race-chart-view .race-stage--public .admin-race-row__identity { grid-area: identity; min-width: 0; overflow: hidden; }
   .race-chart-view .race-stage--public .admin-race-row__identity .ds-train-label-button,

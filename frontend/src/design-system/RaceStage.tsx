@@ -91,6 +91,14 @@ export function RaceStage({ entries, final = false, className = "", referenceTim
     return { delays, order, positions: Object.fromEntries(order.map((id, index) => [id, index])) };
   });
   const animationFrame = useRef<number | null>(null);
+  const animationInputKey = entries.map((entry) => [
+    entry.trainId,
+    currentDelay(entry, final),
+    entry.cancelled || entry.status === "cancelled",
+    entry.status,
+  ].join(":"))
+    .sort()
+    .join("|");
   useEffect(() => {
     if (animationFrame.current !== null) cancelAnimationFrame(animationFrame.current);
     const entriesById = new Map(entries.map((entry) => [entry.trainId, entry]));
@@ -118,7 +126,7 @@ export function RaceStage({ entries, final = false, className = "", referenceTim
     };
     animationFrame.current = requestAnimationFrame(animate);
     return () => { if (animationFrame.current !== null) cancelAnimationFrame(animationFrame.current); };
-  }, [entries, final, animationDurationMs]);
+  }, [animationInputKey, final, animationDurationMs]);
   const entriesById = new Map(entries.map((entry) => [entry.trainId, entry]));
   const sortedEntries = visualState.order.map((id) => entriesById.get(id)).filter((entry): entry is RaceStageEntry => entry !== undefined);
   const maxDelay = Math.max(0, ...sortedEntries.map((entry) => Math.max(0, (final ? entry.finalDelayMinutes : entry.raceDelayMinutes) ?? 0)));

@@ -466,9 +466,8 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-stage--public .admin-race-row__rank-movement { flex: 0 0 auto; min-width: 1.2rem; }
   .race-chart-view .race-stage--public .admin-race-row__sparkline-wrap { align-self: center; grid-area: sparkline; justify-self: end; width: 3rem; }
   .race-chart-view .race-stage--public .admin-race-row__track { grid-area: track; width: 100%; }
-  .race-chart-view .race-stage--public .admin-race-row__status { align-items: flex-start; display: none; flex-direction: row; grid-area: status; min-width: 0; text-align: left; }
-  .race-chart-view .race-stage--public .admin-race-row--has-trend .admin-race-row__status { display: flex; }
-  .race-chart-view .race-stage--public .admin-race-row__status > span:first-child { display: none; }
+  .race-chart-view .race-stage--public .admin-race-row__status { align-items: flex-start; display: flex; flex-direction: row; font-size: .65rem; gap: var(--ds-space-2); grid-area: status; min-width: 0; text-align: left; }
+  .race-chart-view .race-stage--public .admin-race-row__status > span:first-child { display: block; flex: 0 0 auto; }
   .race-chart-view .race-stage--public .admin-race-row__trend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 @media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .public-shell { grid-template-columns: 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }

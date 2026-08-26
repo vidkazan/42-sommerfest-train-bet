@@ -8,7 +8,7 @@ button:hover:not(:disabled) { filter: brightness(1.12); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ds-focus-ring); outline-offset: 2px; }
 .ds-button--secondary { background: var(--ds-surface-muted); color: var(--ds-text-primary); }
 .ds-badge { color: #fff; font-weight: 600; }
-.app-shell { display: grid; gap: var(--ds-space-4); margin: 0 auto; max-width: 1100px; padding: var(--ds-space-4); }
+.app-shell { display: grid; gap: var(--ds-space-4); margin: 0 auto; max-width: 1100px; min-width: 0; padding: var(--ds-space-4); }
 .brand-header { align-items: center; display: flex; gap: var(--ds-space-3); }
 .brand-header__logo { background: var(--ds-surface-muted); border-radius: var(--ds-radius-md); height: 3.5rem; object-fit: cover; width: 3.5rem; }
 .brand-header__name { color: var(--ds-text-primary); font-size: 1.2rem; font-weight: 800; letter-spacing: -.02em; }
@@ -157,15 +157,15 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .bet-form .ds-badge-button { background: var(--ds-accent-blue); margin-top: 0; }
 .bet-form .bet-confirm-button { font-size: 1.25rem; }
 .bet-name-form { align-content: center; flex: 1; min-height: 0; }
-.bet-selection { background: transparent; display: flex; flex: 1; flex-direction: column; gap: var(--ds-space-3); min-height: 0; }
+.bet-selection { background: transparent; display: flex; flex: 1; flex-direction: column; gap: var(--ds-space-3); max-width: 100%; min-height: 0; min-width: 0; }
 .bet-selection--cards { height: 100%; }
 .bet-selection__heading { align-items: center; display: flex; flex: 0 0 auto; justify-content: space-between; padding: 0 var(--ds-space-2); }
 .bet-selection__heading h2 { font-size: var(--ds-font-medium); letter-spacing: .08em; margin: 0; text-transform: uppercase; }
 .bet-selection__arrows { display: flex; gap: var(--ds-space-2); }
 .bet-selection__arrows button { background: transparent; color: var(--ds-text-muted); font-size: 2rem; line-height: 1; padding: 0 .35rem; }
 .bet-selection__arrows button:disabled { opacity: .25; }
-.bet-selection__viewport { flex: 1; min-height: 0; overflow: hidden; }
-.bet-selection__list { align-items: stretch; background: transparent; display: flex; gap: var(--ds-space-3); min-height: 100%; padding: 1px max(1px, calc((100% - min(78vw, 32rem)) / 2)); touch-action: pan-y pinch-zoom; }
+.bet-selection__viewport { flex: 1; max-width: 100%; min-height: 0; min-width: 0; overflow: hidden; width: 100%; }
+.bet-selection__list { align-items: stretch; background: transparent; display: flex; gap: var(--ds-space-3); min-height: 100%; min-width: 0; padding: 1px max(1px, calc((100% - min(78vw, 32rem)) / 2)); touch-action: pan-y pinch-zoom; width: 100%; }
 .bet-selection__list > .ds-journey-card { background: transparent; flex: 0 0 min(78vw, 32rem); min-width: 0; transition: opacity 180ms ease, transform 180ms ease; }
 .bet-selection__list > .bet-selection__card--peek { opacity: .52; transform: scale(.96); }
 .bet-selection__list > .bet-selection__card--active { border: 2px solid var(--ds-focus-ring); box-shadow: var(--ds-shadow); opacity: 1; transform: scale(1); }
@@ -206,7 +206,7 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 @media (max-width: 650px) { .player-onboarding { align-items: end; padding: 0; } .player-onboarding__panel { border-radius: var(--ds-radius-lg) var(--ds-radius-lg) 0 0; max-height: 90vh; overflow-y: auto; } .player-onboarding__steps { grid-template-columns: 1fr; } .player-onboarding__footer { align-items: stretch; flex-direction: column-reverse; } .player-onboarding__footer > div { flex-direction: column; } .player-onboarding__footer button { width: 100%; } .public-help { margin-top: 0; } }
 .journey-card__train-trigger { background: transparent; border: 0; display: inline-flex; max-width: 100%; padding: 0; }
 .journey-card__train-trigger:focus-visible { border-radius: var(--ds-radius-sm); outline: 2px solid var(--ds-focus-ring); outline-offset: 3px; }
-.public-shell > .bet-card-only { background: transparent; border: 0; box-shadow: none; height: clamp(320px, 58vh, 640px); padding: 0; }
+.public-shell > .bet-card-only { background: transparent; border: 0; box-shadow: none; height: clamp(320px, 58vh, 640px); max-width: 100%; min-width: 0; padding: 0; width: 100%; }
 .public-shell > .bet-card-only .bet-selection__viewport { height: 100%; }
 input { background: var(--ds-surface-input); border: 1px solid var(--ds-border-control); border-radius: var(--ds-radius-md); color: var(--ds-text-primary); display: block; font: inherit; margin-bottom: var(--ds-space-4); padding: .8rem; width: 100%; }
 select { background: var(--ds-surface-input); border: 1px solid var(--ds-border-control); border-radius: var(--ds-radius-md); color: var(--ds-text-primary); display: block; font: inherit; margin-bottom: var(--ds-space-4); padding: .8rem; width: 100%; }
@@ -445,5 +445,26 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-chart__header p { font-size: .8rem; }
   .race-chart__row { min-height: 3.6rem; }
   .race-chart__label { align-items: flex-start; flex-direction: column; font-size: var(--ds-font-small); justify-content: center; }
+}
+@media (max-width: 560px) {
+  .race-chart-view .race-stage--public { min-width: 0; overflow: visible; }
+  .race-chart-view .race-stage--public .admin-race-axis { display: block; min-width: 0; }
+  .race-chart-view .race-stage--public .admin-race-axis__spacer { display: none; }
+  .race-chart-view .race-stage--public .admin-race-axis__ticks { width: 100%; }
+  .race-chart-view .race-stage--public .admin-race-stage { --race-row-height-base: 4.5rem; --race-row-height: 4.5rem; min-width: 0; }
+  .race-chart-view .race-stage--public .admin-race-stage:has(.admin-race-row--has-trend) { --race-row-height: 5.4rem; }
+  .race-chart-view .race-stage--public .admin-race-row { align-content: center; column-gap: var(--ds-space-2); grid-template-columns: minmax(0, 1fr) 3rem; grid-template-areas: "identity sparkline" "track track" "status status"; min-width: 0; padding: .35rem 0; row-gap: .2rem; }
+  .race-chart-view .race-stage--public .admin-race-row__identity { grid-area: identity; min-width: 0; overflow: hidden; }
+  .race-chart-view .race-stage--public .admin-race-row__identity .ds-train-label-button,
+  .race-chart-view .race-stage--public .admin-race-row__identity .ds-train-label { max-width: 100%; min-width: 0; }
+  .race-chart-view .race-stage--public .admin-race-row__rank { flex: 0 0 auto; min-width: 1.45rem; }
+  .race-chart-view .race-stage--public .admin-race-row__bet-count { font-size: .6rem; max-width: 3rem; overflow: hidden; padding: .15rem .25rem; text-overflow: ellipsis; white-space: nowrap; }
+  .race-chart-view .race-stage--public .admin-race-row__rank-movement { flex: 0 0 auto; min-width: 1.2rem; }
+  .race-chart-view .race-stage--public .admin-race-row__sparkline-wrap { align-self: center; grid-area: sparkline; justify-self: end; width: 3rem; }
+  .race-chart-view .race-stage--public .admin-race-row__track { grid-area: track; width: 100%; }
+  .race-chart-view .race-stage--public .admin-race-row__status { align-items: flex-start; display: none; flex-direction: row; grid-area: status; min-width: 0; text-align: left; }
+  .race-chart-view .race-stage--public .admin-race-row--has-trend .admin-race-row__status { display: flex; }
+  .race-chart-view .race-stage--public .admin-race-row__status > span:first-child { display: none; }
+  .race-chart-view .race-stage--public .admin-race-row__trend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 @media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .public-shell { grid-template-columns: 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }

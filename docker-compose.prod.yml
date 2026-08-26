@@ -33,6 +33,8 @@ services:
       EVENT_TIMEZONE: ${EVENT_TIMEZONE:-Europe/Berlin}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-3001}:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - sqlite_data:/data
     healthcheck:

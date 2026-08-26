@@ -103,7 +103,7 @@ export type Game = {
   journeyDepartureEnd?: string;
   bettingStart?: string;
   bettingEnd?: string;
-  gameEndTime?: string;
+  gameEndTime?: string | null;
   stopIds?: string[];
   mapEvents?: MapEvent[];
 };
@@ -135,17 +135,19 @@ export type JourneyFetchResult = {
 
 export type AdminDashboard = {
   state: "no_active_game" | "waiting" | "live" | "finished";
-  game: { id: string; name: string; eventDate: string; timezone: string; status: string; journeyDepartureStart: string; gameEndTime: string; bettingStart: string; bettingEnd: string } | null;
+  game: { id: string; name: string; eventDate: string; timezone: string; status: string; journeyDepartureStart: string; gameEndTime: string | null; bettingStart: string; bettingEnd: string } | null;
   entries: Array<{
     trainId: string; displayName: string; origin: string; destination: string;
     scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null;
     actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null;
     currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; liveError: string | null;
-    position: number | null; cancelled: boolean; stale: boolean; raceColor: string | null;
+    position: number | null; cancelled: boolean; stale: boolean; raceColor: string | null; betCount: number; delayHistory: Array<{ delayMinutes: number; recordedAt: string }>;
   }>;
   lastUpdatedAt: string | null;
   stale: boolean;
 };
+
+export type PopulateBetsResult = { gameId: string; totalTrains: number; createdBets: number; existingBets: number };
 
 async function request<T>(path: string, init: RequestInit = {}, adminToken?: string): Promise<T> {
   const headers = new Headers(init.headers);
@@ -165,11 +167,12 @@ async function request<T>(path: string, init: RequestInit = {}, adminToken?: str
 export const api = {
   checkAdmin: (token: string) => request<{ ok: true }>("/api/admin/auth/check", {}, token),
   getAdminDashboard: (gameId: string, token: string) => request<AdminDashboard>(`/api/admin/games/${encodeURIComponent(gameId)}/dashboard`, {}, token),
+  populateBets: (gameId: string, token: string) => request<PopulateBetsResult>(`/api/admin/games/${encodeURIComponent(gameId)}/populate-bets`, { method: "POST" }, token),
 
   searchStations: (text: string, token: string) =>
     request<Station[]>(`/api/admin/stations/search?text=${encodeURIComponent(text)}`, {}, token),
 
-  createGame: (body: { name?: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; gameEndTime: string; stopIds: string[] }, token: string) =>
+  createGame: (body: { name?: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; stopIds: string[] }, token: string) =>
     request<{ game: Game; skippedDisruptions?: SkippedDisruption[] }>("/api/admin/games", { method: "POST", body: JSON.stringify(body) }, token),
   applyDisruptions: (gameId: string, disruptionsJson: string, constructionJson: string, footballJson: string, token: string, preview = false) =>
     request<{ preview: boolean; mapEvents: MapEvent[]; skippedDisruptions: SkippedDisruption[]; appliedAt?: string }>(
@@ -203,7 +206,7 @@ export const api = {
   getGame: (gameId: string) => request<{ game: Game }>(`/api/games/${encodeURIComponent(gameId)}`),
   getTrains: (gameId: string) => request<{ trains: Journey[]; lastUpdatedAt: string | null; stale: boolean }>(`/api/trains?gameId=${encodeURIComponent(gameId)}`),
   getProgress: (gameId: string) => request<{ trains: Array<{ id: string; displayName: string; scheduledArrival: string; actualArrival: string | null; raceDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; cancelled: boolean; stale: boolean; raceColor?: string | null; geometry?: string | null; routeJson?: string | null }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/progress?gameId=${encodeURIComponent(gameId)}`),
-  getLeaderboard: (gameId: string) => request<{ entries: Array<{ trainId: string; displayName: string; origin: string; destination: string; position: number | null; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; cancelled: boolean; stale: boolean; raceColor?: string | null; bettors: Array<{ participantId: string; username: string }> }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/leaderboard?gameId=${encodeURIComponent(gameId)}`),
+  getLeaderboard: (gameId: string) => request<{ entries: Array<{ trainId: string; displayName: string; origin: string; destination: string; position: number | null; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; cancelled: boolean; stale: boolean; raceColor?: string | null; delayHistory: Array<{ delayMinutes: number; recordedAt: string }>; bettors: Array<{ participantId: string; username: string }> }>; lastUpdatedAt: string | null; stale: boolean }>(`/api/leaderboard?gameId=${encodeURIComponent(gameId)}`),
   getEvents: (gameId: string, limit = 5) => request<{ events: LiveEvent[] }>(`/api/events?gameId=${encodeURIComponent(gameId)}&limit=${limit}`),
   getResults: (gameId: string) => request<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; trains: unknown[] }>(`/api/results?gameId=${encodeURIComponent(gameId)}`),
   getParticipantMe: (gameId: string) => request<{ participantId: string; username: string; trainId: string; hasBet: true }>(`/api/participants/me?gameId=${encodeURIComponent(gameId)}`),

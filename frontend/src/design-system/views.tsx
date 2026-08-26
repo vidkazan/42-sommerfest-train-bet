@@ -4,13 +4,13 @@ import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap 
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
 import type { AdminDashboard, Game, Journey, LiveEvent, MapEvent, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
-import { Badge, BadgeButton, Button, Notice, StatusBadge, TrainIcon } from "./components";
+import { Badge, BadgeButton, Button, DelayBadge, Notice, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
 import { JourneyCard } from "./JourneyCard";
 import { trainColor } from "./trainColors";
 import { applyHistoryRatings } from "../historyRatings";
 import { RaceStage } from "./RaceStage";
-import { TrainLabel } from "./TrainLabel";
+import { gameNameEmoji, TrainLabel, TrainLabelButton } from "./TrainLabel";
 
 export type PublicView = "browse" | "progress" | "race" | "leaderboard" | "events";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
@@ -19,26 +19,27 @@ export type LiveLeaderboardEntry = {
   scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; status: string;
   stopCount: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null;
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null;
-  raceColor?: string | null;
+  betCount?: number;
+  raceColor?: string | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }>;
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type BrandHeaderProps = { logoSrc: string };
 export type TrainMapViewProps = { journeys: Journey[]; mapEvents?: MapEvent[]; selectedTrainId: string | null; liveEntries: LiveLeaderboardEntry[]; currentParticipantId?: string | null; onSelect: (trainId: string) => void };
 export type BetViewProps = { journeys: Journey[]; selectedTrainId: string | null; username: string; betSubmitted: boolean; loading: boolean; error: string | null; usernameCheckLoading: boolean; usernameCheckError: string | null; onSelectTrain: (trainId: string) => void; onUsernameChange: (username: string) => void; onCheckUsername: () => Promise<boolean>; onSubmit: () => void; cardsOnly?: boolean; actionsOnly?: boolean };
-export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
-export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; entries: LiveLeaderboardEntry[]; onSelectTrain: (trainId: string) => void };
-export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
-export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; currentParticipantId: string | null; final?: boolean; onSelectTrain?: (trainId: string) => void };
+export type LiveLeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean };
+export type LiveEventsViewProps = { myTrainId: string | null; events: LiveEvent[]; entries: LiveLeaderboardEntry[]; journeys: Journey[]; onSelectTrain: (trainId: string) => void };
+export type LeaderboardViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; selectedTrainId: string | null; onSelectTrain: (trainId: string) => void; lastUpdatedAt: string | null; stale: boolean; final?: boolean; finalStatus?: string; myUsername?: string; myBetPlace?: number | null; myBetWon?: boolean };
+export type RaceChartViewProps = { entries: LiveLeaderboardEntry[]; journeys: Journey[]; currentParticipantId: string | null; final?: boolean; onSelectTrain?: (trainId: string) => void };
 export type ResultsViewProps = { status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; myUsername: string; myTrainName: string | null; myTrainDelayMinutes: number | null; myBetPlace: number | null; myBetWon: boolean };
 export type AdminAccessViewProps = { value: string; loading: boolean; error: string | null; onChange: (value: string) => void; onSubmit: () => void };
-export type AdminGameListViewProps = { games: Game[]; onDelete: (game: Game) => void; onDashboard: (game: Game) => void };
+export type AdminGameListViewProps = { games: Game[]; loading: boolean; error: string | null; message: string | null; onDelete: (game: Game) => void; onContinue: (game: Game) => void; onDashboard: (game: Game) => void; onPopulateBets: (game: Game) => void };
 export type AdminSetupViewProps = {
   stationQuery: string; stationResults: Station[]; selectedStations: Station[]; manualStationIds: string; stationLoading: boolean; stationError: string | null;
-  gameName: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string; gameEndTime: string;
+  gameName: string; eventDate: string; bettingStart: string; bettingEnd: string; journeyDepartureStart: string; journeyDepartureEnd: string;
   loading: boolean; error: string | null;
   onStationQueryChange: (value: string) => void; onSearchStations: () => void; onToggleStation: (station: Station, selected: boolean) => void;
   onManualStationIdsChange: (value: string) => void; onGameNameChange: (value: string) => void; onEventDateChange: (value: string) => void;
-  onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onGameEndTimeChange: (value: string) => void; onCreateGame: () => void;
+  onBettingStartChange: (value: string) => void; onBettingEndChange: (value: string) => void; onJourneyStartChange: (value: string) => void; onJourneyEndChange: (value: string) => void; onCreateGame: () => void;
 };
 export type AdminReviewViewProps = { game: Game; journeys: Journey[]; minimumDuration: string; minimumStars: string; maximumStars: string; minimumDelayMinutes: string; maximumDelayMinutes: string; onlyJourneysWithGameName: boolean; selectedJourneyIds: string[]; disruptionsJson: string; constructionJson: string; footballJson: string; skippedDisruptions: SkippedDisruption[]; disruptionMessage: string | null; loading: boolean; whitelistSaved: boolean; error: string | null; onDisruptionsJsonChange: (value: string) => void; onConstructionJsonChange: (value: string) => void; onFootballJsonChange: (value: string) => void; onApplyDisruptions: () => void; onFetch: () => void; onMinimumDurationChange: (value: string) => void; onMinimumStarsChange: (value: string) => void; onMaximumStarsChange: (value: string) => void; onMinimumDelayMinutesChange: (value: string) => void; onMaximumDelayMinutesChange: (value: string) => void; onOnlyJourneysWithGameNameChange: (value: boolean) => void; onToggleJourney: (tripId: string) => void; onSave: () => void; onActivate: () => void };
 export type AdminActiveViewProps = { game: Game };
@@ -65,13 +66,14 @@ export function AdminDashboardView({ dashboard }: { dashboard: AdminDashboard })
   const finished = dashboard.state === "finished";
   const countdownLabel = dashboard.state === "waiting" ? "Starts in" : "Ends in";
   const countdownTarget = dashboard.state === "waiting" ? dashboard.game?.journeyDepartureStart : dashboard.game?.gameEndTime;
+  const totalBets = dashboard.entries.reduce((total, entry) => total + entry.betCount, 0);
   const stageEntries = dashboard.entries.map((entry) => ({ ...entry, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes }));
   return <section className="admin-dashboard" aria-label="Race dashboard">
     <header className="admin-dashboard__header">
       <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
       <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <CountdownBadge label={countdownLabel} target={countdownTarget} />}</div>
     </header>
-    <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
+    <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} {totalBets === 1 ? "bet" : "bets"}</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
     <RaceStage entries={stageEntries} final={finished} />
   </section>;
 }
@@ -91,6 +93,24 @@ function raceStateVariant(state: RaceState) {
 
 export function GameHeader({ eyebrow, title, description }: GameHeaderViewProps) {
   return <section className="hero">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1><p>{description}</p></section>;
+}
+
+export function PlayerOnboarding({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return <dialog className="player-onboarding" open={open} aria-labelledby="player-onboarding-title">
+    <section className="player-onboarding__panel">
+      <p className="eyebrow">Welcome to the delay race</p>
+      <h2 id="player-onboarding-title">Pick a train. Root for delays.</h2>
+      <p>Make one prediction, then watch the timetable unravel.</p>
+      <div className="player-onboarding__steps">
+        <article><span aria-hidden="true">🚆</span><strong>Choose a train</strong><p>Browse the map and train cards to find your contender.</p></article>
+        <article><span aria-hidden="true">🎟️</span><strong>Place one bet</strong><p>Enter a nickname and back one train. Others can back it too.</p></article>
+        <article><span aria-hidden="true">🏁</span><strong>Follow the race</strong><p>If your train gains the most delay, you win. Cancelled trains win immediately.</p></article>
+      </div>
+      <Notice className="player-onboarding__disclaimer"><strong>Alpha prototype:</strong> this experience is still being tested. Features can change or break, and live train data may be delayed, incomplete, or inaccurate. This is for entertainment—do not use it for real travel decisions. Bets close at 18:00.</Notice>
+      <div className="player-onboarding__footer"><a href="https://docs.google.com/forms/d/1vHIjIAnIFgTSQVf4G7Ca2ZLHOULy-ygE-YgGNs34yXo/" target="_blank" rel="noreferrer">Give feedback</a><Button type="button" onClick={onClose}>Got it</Button></div>
+    </section>
+  </dialog>;
 }
 
 export function BrandHeader({ logoSrc }: BrandHeaderProps) {
@@ -208,24 +228,81 @@ function formatPlace(position: number) {
   return `${position}${suffix} place`;
 }
 
-export function LiveLeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LiveLeaderboardViewProps) {
+export function LiveLeaderboardView({ entries, journeys, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale }: LiveLeaderboardViewProps) {
+  const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
   const prioritizedEntries = prioritizeCurrentBet(entries, currentParticipantId);
   const myTrainId = entries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId))?.trainId;
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
+  const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
+  const detailJourney = detailEntry ? {
+    ...(journeys.find((journey) => journey.id === detailEntry.trainId) ?? {}),
+    id: detailEntry.trainId,
+    externalTripId: detailEntry.trainId,
+    displayName: detailEntry.displayName,
+    origin: detailEntry.origin,
+    destination: detailEntry.destination,
+    scheduledDeparture: detailEntry.scheduledDeparture,
+    scheduledArrival: detailEntry.scheduledArrival,
+    durationSeconds: detailEntry.durationSeconds,
+    stopCount: detailEntry.stopCount,
+    actualArrival: detailEntry.actualArrival,
+    raceDelayMinutes: detailEntry.raceDelayMinutes,
+    finalDelayMinutes: detailEntry.finalDelayMinutes,
+    departureDelayMinutes: detailEntry.departureDelayMinutes,
+    status: detailEntry.cancelled ? "cancelled" : undefined,
+    liveStatus: detailEntry.status,
+    raceColor: detailEntry.raceColor,
+  } as Journey : null;
+  useEffect(() => {
+    if (!detailTrainId) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailTrainId(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [detailTrainId]);
   return <section className="progress-view" aria-label="Live progress">
     <section className="progress-race" aria-label="Live race">
       <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
       {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="journey-list" aria-label="Live leaderboard">{prioritizedEntries.map((entry) => {
-        const journey: Journey = { id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status, raceColor: entry.raceColor };
-        return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} />;
+        const journey: Journey = { ...(journeys.find((candidate) => candidate.id === entry.trainId) ?? {}), id: entry.trainId, externalTripId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination, scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds, stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.cancelled ? "cancelled" : undefined, liveStatus: entry.status, raceColor: entry.raceColor } as Journey;
+        return <JourneyCard key={entry.trainId} journey={journey} mode="leaderboard" position={entry.position} raceStatus={getRaceState(entry) ?? undefined} bettors={entry.bettors} currentParticipantId={currentParticipantId} selected={entry.trainId === selectedTrainId} onSelect={() => onSelectTrain(entry.trainId)} onTrainLabelClick={() => { onSelectTrain(entry.trainId); setDetailTrainId(entry.trainId); }} />;
       })}</div>}
     </section>
+    {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
+      <section className="train-detail-dialog__panel">
+        <header className="train-detail-dialog__header">
+          <h2 id="train-detail-title">Train details</h2>
+          <button type="button" className="train-detail-dialog__close" onClick={() => setDetailTrainId(null)} aria-label="Close train details">×</button>
+        </header>
+        <JourneyCard journey={detailJourney} mode="public" showBettingInfo={false} />
+      </section>
+    </dialog>}
   </section>;
 }
 
-export function LiveEventsView({ myTrainId, events, entries, onSelectTrain }: LiveEventsViewProps) {
+export function LiveEventsView({ myTrainId, events, entries, journeys, onSelectTrain }: LiveEventsViewProps) {
   const [onlyMyTrain, setOnlyMyTrain] = useState(false);
+  const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
   const visibleEvents = onlyMyTrain ? events.filter((event) => event.trainId === myTrainId) : events;
+  const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
+  const detailJourney = detailEntry ? {
+    ...(journeys.find((journey) => journey.id === detailEntry.trainId) ?? {}),
+    id: detailEntry.trainId,
+    externalTripId: detailEntry.trainId,
+    displayName: detailEntry.displayName,
+    origin: detailEntry.origin,
+    destination: detailEntry.destination,
+    scheduledDeparture: detailEntry.scheduledDeparture,
+    scheduledArrival: detailEntry.scheduledArrival,
+    durationSeconds: detailEntry.durationSeconds,
+    stopCount: detailEntry.stopCount,
+    actualArrival: detailEntry.actualArrival,
+    raceDelayMinutes: detailEntry.raceDelayMinutes,
+    finalDelayMinutes: detailEntry.finalDelayMinutes,
+    departureDelayMinutes: detailEntry.departureDelayMinutes,
+    status: detailEntry.cancelled ? "cancelled" : undefined,
+    liveStatus: detailEntry.status,
+    raceColor: detailEntry.raceColor,
+  } as Journey : null;
   return <section className="live-events live-events-view" aria-label="Events">
       <div className="live-events__heading"><h2>Events</h2><label className="live-events__filter"><input type="checkbox" checked={onlyMyTrain} onChange={(event) => setOnlyMyTrain(event.target.checked)} disabled={!myTrainId} /> Only my train</label></div>
       {!visibleEvents.length ? <p className="live-events__empty">{onlyMyTrain ? "No events for your train yet." : "No drama yet. The trains are behaving."}</p> : <div className="live-events__list">{visibleEvents.map((event) => {
@@ -235,37 +312,87 @@ export function LiveEventsView({ myTrainId, events, entries, onSelectTrain }: Li
         const currentDelay = numericEvent ? event.currentDelayMinutes : null;
         const change = event.changeMinutes ?? null;
         const changeLabel = change === null ? "—" : `${change > 0 ? "↑ " : change < 0 ? "↓ " : "— "}${Math.abs(change)}`;
-        const title = (event.displayName ?? event.title).split(" ")[0];
+        const trainEntry = event.trainId ? entries.find((entry) => entry.trainId === event.trainId) : undefined;
         return <article className={`live-event ${selectable ? "selectable" : ""}`.trim()} key={event.id} role={selectable ? "button" : undefined} tabIndex={selectable ? 0 : undefined} onClick={selectable ? selectEventTrain : undefined} onKeyDown={selectable ? (keyboardEvent) => { if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") { keyboardEvent.preventDefault(); selectEventTrain(); } } : undefined}>
         <div className="live-event__body">
-          <div className="live-event__top"><strong style={event.trainId ? { color: trainColor(event.trainId, entries.find((entry) => entry.trainId === event.trainId)?.raceColor) } : undefined}>{title}</strong><time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My train</Badge>}</div>
+          <div className="live-event__top">{event.trainId ? <TrainLabelButton label={event.displayName ?? event.title} gameName={journeys.find((journey) => journey.id === event.trainId)?.history?.lineGameName} trainId={event.trainId} raceColor={trainEntry?.raceColor} cancelled={trainEntry?.cancelled} onClick={() => { onSelectTrain(event.trainId!); setDetailTrainId(event.trainId!); }} /> : <strong className="live-event__title">{event.displayName ?? event.title}</strong>}<time dateTime={event.createdAt}>{eventAge(event.createdAt)}</time>{event.trainId === myTrainId && <Badge variant="blue" className="live-event__my-train">My train</Badge>}</div>
           <div className="live-event__numbers">{numericEvent ? <strong className={`live-event__delay live-event__delay--${currentDelay! > 0 ? "late" : currentDelay! < 0 ? "early" : "on-time"}`}>{currentDelay! >= 0 ? "+" : "−"}{Math.abs(currentDelay!)} min</strong> : <strong className="live-event__delay">{event.title}</strong>}{numericEvent && <Badge variant="green" className="live-event__change">{changeLabel}</Badge>}</div>
           <p className="live-event__message">{numericEvent && event.message.startsWith("Delay ") ? event.title : event.message}</p>
         </div>
         {event.source === "motis" && <div className="live-event__badges"><Badge variant={eventVariant(event)}>MOTIS</Badge></div>}
       </article>})}</div>}
-    </section>;
+    {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="events-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
+      <section className="train-detail-dialog__panel">
+        <header className="train-detail-dialog__header">
+          <h2 id="events-train-detail-title">Train details</h2>
+          <button type="button" className="train-detail-dialog__close" onClick={() => setDetailTrainId(null)} aria-label="Close train details">×</button>
+        </header>
+        <JourneyCard journey={detailJourney} mode="public" showBettingInfo={false} />
+      </section>
+    </dialog>}
+  </section>;
 }
 
-export function RaceChartView({ entries, currentParticipantId, final = false, onSelectTrain }: RaceChartViewProps) {
+export function RaceChartView({ entries, journeys, currentParticipantId, final = false, onSelectTrain }: RaceChartViewProps) {
+  const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
+  const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
+  const detailJourney = detailEntry ? {
+    ...(journeys.find((journey) => journey.id === detailEntry.trainId) ?? {}),
+    id: detailEntry.trainId,
+    externalTripId: detailEntry.trainId,
+    displayName: detailEntry.displayName,
+    origin: detailEntry.origin,
+    destination: detailEntry.destination,
+    scheduledDeparture: detailEntry.scheduledDeparture,
+    scheduledArrival: detailEntry.scheduledArrival,
+    durationSeconds: detailEntry.durationSeconds,
+    stopCount: detailEntry.stopCount,
+    actualArrival: detailEntry.actualArrival,
+    raceDelayMinutes: detailEntry.raceDelayMinutes,
+    finalDelayMinutes: detailEntry.finalDelayMinutes,
+    departureDelayMinutes: detailEntry.departureDelayMinutes,
+    status: detailEntry.cancelled ? "cancelled" : undefined,
+    liveStatus: detailEntry.status,
+    raceColor: detailEntry.raceColor,
+  } as Journey : null;
+  useEffect(() => {
+    if (!detailTrainId) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailTrainId(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [detailTrainId]);
   const stageEntries = entries.map((entry) => ({
     trainId: entry.trainId,
     displayName: entry.displayName,
+    gameName: journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName,
+    scheduledArrival: entry.scheduledArrival,
     raceDelayMinutes: entry.raceDelayMinutes,
     finalDelayMinutes: entry.finalDelayMinutes,
     status: entry.status,
     cancelled: entry.cancelled,
     stale: entry.stale,
     raceColor: entry.raceColor,
+    betCount: entry.bettors.length,
     isMine: entry.bettors.some((bettor) => bettor.participantId === currentParticipantId),
+    delayHistory: entry.delayHistory,
   }));
   return <section className="race-chart-view" aria-label="Delay race">
     <header className="race-chart__header"><div><h2>The delay race</h2><p>Biggest actual delay at the final stop wins.</p></div></header>
-    <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} />
+    <RaceStage entries={stageEntries} final={final} className="race-stage--public" onSelectTrain={onSelectTrain} onOpenTrain={(trainId) => { onSelectTrain?.(trainId); setDetailTrainId(trainId); }} />
+    {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="race-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
+      <section className="train-detail-dialog__panel">
+        <header className="train-detail-dialog__header">
+          <h2 id="race-train-detail-title">Train details</h2>
+          <button type="button" className="train-detail-dialog__close" onClick={() => setDetailTrainId(null)} aria-label="Close train details">×</button>
+        </header>
+        <JourneyCard journey={detailJourney} mode="public" showBettingInfo={false} />
+      </section>
+    </dialog>}
   </section>;
 }
 
-export function LeaderboardView({ entries, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, final = false, finalStatus, myUsername, myBetPlace, myBetWon }: LeaderboardViewProps) {
+export function LeaderboardView({ entries, journeys, currentParticipantId, selectedTrainId, onSelectTrain, lastUpdatedAt, stale, final = false, finalStatus, myUsername, myBetPlace, myBetWon }: LeaderboardViewProps) {
+  const [detailTrainId, setDetailTrainId] = useState<string | null>(null);
   const finalEntries = final ? [...entries].sort((left, right) => {
     if (left.cancelled !== right.cancelled) return Number(right.cancelled) - Number(left.cancelled);
     const leftValid = !left.cancelled && left.finalDelayMinutes !== null;
@@ -277,6 +404,32 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
   const currentBetEntry = finalEntries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === currentParticipantId));
   const currentBetPlace = currentBetEntry?.position ?? myBetPlace;
   const updatedMinutesAgo = getUpdatedMinutesAgo(lastUpdatedAt);
+  const detailEntry = detailTrainId ? entries.find((entry) => entry.trainId === detailTrainId) : undefined;
+  const detailJourney = detailEntry ? {
+    ...(journeys.find((journey) => journey.id === detailEntry.trainId) ?? {}),
+    id: detailEntry.trainId,
+    externalTripId: detailEntry.trainId,
+    displayName: detailEntry.displayName,
+    origin: detailEntry.origin,
+    destination: detailEntry.destination,
+    scheduledDeparture: detailEntry.scheduledDeparture,
+    scheduledArrival: detailEntry.scheduledArrival,
+    durationSeconds: detailEntry.durationSeconds,
+    stopCount: detailEntry.stopCount,
+    actualArrival: detailEntry.actualArrival,
+    raceDelayMinutes: detailEntry.raceDelayMinutes,
+    finalDelayMinutes: detailEntry.finalDelayMinutes,
+    departureDelayMinutes: detailEntry.departureDelayMinutes,
+    status: detailEntry.cancelled ? "cancelled" : undefined,
+    liveStatus: detailEntry.status,
+    raceColor: detailEntry.raceColor,
+  } as Journey : null;
+  useEffect(() => {
+    if (!detailTrainId) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailTrainId(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [detailTrainId]);
   return <section className="leaderboard-view" aria-label="Leaderboard">
     <h2>{final ? "Final standings" : "Who’s betting on each train?"}</h2>
     {final && finalStatus === "finished" && myUsername && <div className="results-my-bet">
@@ -287,15 +440,15 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
     <div className="progress-meta ds-text-medium"><Notice>{stale ? "Live data is temporarily stale." : "Updates every minute."}</Notice>{updatedMinutesAgo !== null && <span>Last update — {updatedMinutesAgo === 0 ? "just now" : `${updatedMinutesAgo} min ago`}</span>}</div>
     {!prioritizedEntries.length ? <p>No bets yet.</p> : <div className="leaderboard-list">{prioritizedEntries.map((entry) => {
       const delayMinutes = final ? entry.finalDelayMinutes : entry.raceDelayMinutes;
-      const delay = delayMinutes !== null && delayMinutes !== undefined ? `${delayMinutes >= 0 ? "+" : "−"}${Math.abs(delayMinutes)} min` : null;
       const raceState = getRaceState(entry);
       const selected = entry.trainId === selectedTrainId;
       return <article className={`leaderboard-row ${selected ? "selected" : ""}`} key={entry.trainId} role="button" tabIndex={0} onClick={() => onSelectTrain(entry.trainId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTrain(entry.trainId); } }}>
         <div className="leaderboard-row__top">
           <Badge variant="clear" className="journey-card__rank-badge">{entry.position === 1 ? "🥇" : entry.position === 2 ? "🥈" : entry.position === 3 ? "🥉" : entry.position ? `${entry.position}${entry.position % 100 >= 11 && entry.position % 100 <= 13 ? "th" : entry.position % 10 === 1 ? "st" : entry.position % 10 === 2 ? "nd" : entry.position % 10 === 3 ? "rd" : "th"} place` : "Waiting"}</Badge>
           {raceState && <Badge variant={raceStateVariant(raceState)}>{raceState}</Badge>}
-          <TrainLabel label={entry.displayName} trainId={entry.trainId} raceColor={entry.raceColor} size="regular" />
-          {delay && <Badge variant="clear" style={{ background: final ? "var(--ds-surface)" : trainColor(entry.trainId, entry.raceColor), color: "#fff" }}>{delay}</Badge>}
+          <span onClick={(event) => event.stopPropagation()}><Badge variant="secondary" className="leaderboard-row__bet-count">{entry.bettors.length === 1 ? "1 bet" : `${entry.bettors.length} bets`}</Badge></span>
+          <TrainLabelButton label={entry.displayName} gameName={journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName} trainId={entry.trainId} raceColor={entry.raceColor} cancelled={entry.cancelled} onClick={() => { onSelectTrain(entry.trainId); setDetailTrainId(entry.trainId); }} />
+          {delayMinutes !== null && delayMinutes !== undefined && <DelayBadge minutes={delayMinutes} />}
         </div>
         <span className="leaderboard-row__route">{entry.origin} → {entry.destination}</span>
         {entry.bettors.length > 0
@@ -305,6 +458,15 @@ export function LeaderboardView({ entries, currentParticipantId, selectedTrainId
           : <span className="leaderboard-row__empty">No bettors yet</span>}
       </article>;
     })}</div>}
+    {detailJourney && <dialog className="train-detail-dialog" open aria-labelledby="leaderboard-train-detail-title" onClick={(event) => { if (event.target === event.currentTarget) setDetailTrainId(null); }}>
+      <section className="train-detail-dialog__panel">
+        <header className="train-detail-dialog__header">
+          <h2 id="leaderboard-train-detail-title">Train details</h2>
+          <button type="button" className="train-detail-dialog__close" onClick={() => setDetailTrainId(null)} aria-label="Close train details">×</button>
+        </header>
+        <JourneyCard journey={detailJourney} mode="public" showBettingInfo={false} />
+      </section>
+    </dialog>}
   </section>;
 }
 
@@ -337,22 +499,23 @@ export function AdminAccessView({ value, loading, error, onChange, onSubmit }: A
   </form>;
 }
 
-export function AdminGameListView({ games, onDelete, onDashboard }: AdminGameListViewProps) {
+export function AdminGameListView({ games, loading, error, message, onDelete, onContinue, onDashboard, onPopulateBets }: AdminGameListViewProps) {
   return <>
     <h2>Games</h2>
+    {error && <p className="error" role="alert">{error}</p>}
     {games.length === 0 ? <p>No games created yet.</p> : <div className="journey-list">
       {games.map((game) => <article className="journey-card" key={game.id}>
         <strong>{game.name}</strong>
         <span>{game.eventDate} · {game.status}</span>
         <span>{game.bettingStart ? `${new Date(game.bettingStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${game.bettingEnd ? new Date(game.bettingEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : ""}</span>
-        <div className="admin-game-actions"><a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a>{(game.status === "active" || game.status === "finished") && <Button type="button" variant="secondary" onClick={() => onDashboard(game)}>Dashboard</Button>}</div>
+        <div className="admin-game-actions"><a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a>{game.status === "draft" && <Button type="button" variant="secondary" disabled={loading} onClick={() => onContinue(game)}>Continue</Button>}{game.status === "active" && <Button type="button" variant="secondary" disabled={loading} onClick={() => { if (window.confirm("Populate every included train with one demo bet?")) onPopulateBets(game); }}>{loading ? "Populating…" : "Populate all trains with demo bets"}</Button>}{(game.status === "active" || game.status === "finished") && <Button type="button" variant="secondary" onClick={() => onDashboard(game)}>Dashboard</Button>}</div>
         <Button type="button" variant="secondary" onClick={() => onDelete(game)}>Delete game</Button>
       </article>)}
-    </div>}
+    </div>}{message && <p className="field-help" role="status">{message}</p>}
   </>;
 }
 
-export function AdminSetupView({ stationQuery, stationResults, selectedStations, manualStationIds, stationLoading, stationError, gameName, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, gameEndTime, loading, error, onStationQueryChange, onSearchStations, onToggleStation, onManualStationIdsChange, onGameNameChange, onEventDateChange, onBettingStartChange, onBettingEndChange, onJourneyStartChange, onJourneyEndChange, onGameEndTimeChange, onCreateGame }: AdminSetupViewProps) {
+export function AdminSetupView({ stationQuery, stationResults, selectedStations, manualStationIds, stationLoading, stationError, gameName, eventDate, bettingStart, bettingEnd, journeyDepartureStart, journeyDepartureEnd, loading, error, onStationQueryChange, onSearchStations, onToggleStation, onManualStationIdsChange, onGameNameChange, onEventDateChange, onBettingStartChange, onBettingEndChange, onJourneyStartChange, onJourneyEndChange, onCreateGame }: AdminSetupViewProps) {
   const manualIdsChanged = (value: string) => onManualStationIdsChange(value);
   return <>
     <hr />
@@ -380,7 +543,6 @@ export function AdminSetupView({ stationQuery, stationResults, selectedStations,
       <label className="field-label" htmlFor="betting-end">Betting closes</label><input id="betting-end" type="time" value={bettingEnd} onChange={(event) => onBettingEndChange(event.target.value)} required />
       <label className="field-label" htmlFor="journey-start">Journey departures from</label><input id="journey-start" type="time" value={journeyDepartureStart} onChange={(event) => onJourneyStartChange(event.target.value)} required />
       <label className="field-label" htmlFor="journey-end">Journey departures until</label><input id="journey-end" type="time" value={journeyDepartureEnd} onChange={(event) => onJourneyEndChange(event.target.value)} required />
-      <label className="field-label" htmlFor="game-end-time">Game end time</label><input id="game-end-time" type="time" value={gameEndTime} onChange={(event) => onGameEndTimeChange(event.target.value)} required /><p className="field-help">When the last selected train is expected to arrive.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <Button type="submit" disabled={loading || (selectedStations.length === 0 && !manualStationIds.trim())}>{loading ? "Creating…" : "Create draft game"}</Button>
     </form>
@@ -388,6 +550,7 @@ export function AdminSetupView({ stationQuery, stationResults, selectedStations,
 }
 
 export function AdminReviewView({ game, journeys, minimumDuration, minimumStars, maximumStars, minimumDelayMinutes, maximumDelayMinutes, onlyJourneysWithGameName, selectedJourneyIds, disruptionsJson, constructionJson, footballJson, skippedDisruptions, disruptionMessage, loading, whitelistSaved, error, onDisruptionsJsonChange, onConstructionJsonChange, onFootballJsonChange, onApplyDisruptions, onFetch, onMinimumDurationChange, onMinimumStarsChange, onMaximumStarsChange, onMinimumDelayMinutesChange, onMaximumDelayMinutesChange, onOnlyJourneysWithGameNameChange, onToggleJourney, onSave, onActivate }: AdminReviewViewProps) {
+  const [journeySearch, setJourneySearch] = useState("");
   const minimumStarValue = Number(minimumStars);
   const maximumStarValue = Number(maximumStars);
   const minimumDelayValue = Number(minimumDelayMinutes);
@@ -411,6 +574,17 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
     if (!validStarRange || !validDelayRange || totalStars < minimumStarValue || totalStars > maximumStarValue) return [];
     return [{ ...journey, history: ratedHistory }];
   });
+  const normalizedJourneySearch = journeySearch.trim().toLocaleLowerCase();
+  const selectedFetchedJourneys = journeys.filter((journey) => selectedJourneyIds.includes(journey.externalTripId));
+  const fetchedJourneyCandidates = journeys
+    .filter((journey) => !normalizedJourneySearch || [journey.displayName, journey.lineName, journey.trainNumber, journey.origin, journey.destination]
+      .filter(Boolean)
+      .some((value) => String(value).toLocaleLowerCase().includes(normalizedJourneySearch)))
+    .filter((journey) => !selectedJourneyIds.includes(journey.externalTripId))
+    .sort((left, right) => {
+      const displayNameComparison = left.displayName.localeCompare(right.displayName, undefined, { numeric: true, sensitivity: "base" });
+      return displayNameComparison || left.externalTripId.localeCompare(right.externalTripId);
+    });
   return <>
     <h2>{game.name}</h2>
     <p>Draft created. Next, fetch candidate journeys for the selected stations.</p>
@@ -434,6 +608,31 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
           <input id="maximum-delay-minutes" className="admin-star-filter__range-max" aria-label="Maximum average delay in minutes" type="range" min="0" max="60" step="1" value={maximumDelayMinutes} onChange={(event) => onMaximumDelayMinutesChange(event.target.value)} />
         </div>
       </div>
+      <section className="admin-whitelist-picker" aria-label="All fetched trains">
+        <h3>Include any fetched train</h3>
+        <p className="field-help">Search fetched trains, including candidates outside the filters above.</p>
+        <label className="field-label" htmlFor="fetched-train-search">Search candidates</label>
+        <input id="fetched-train-search" type="search" value={journeySearch} onChange={(event) => setJourneySearch(event.target.value)} placeholder="Line, train number, origin, or destination" />
+        {normalizedJourneySearch && <div className="admin-whitelist-picker__dropdown" role="listbox" aria-label="Fetched train candidates">
+          {fetchedJourneyCandidates.length === 0 ? <p className="field-help">No candidates found.</p> : fetchedJourneyCandidates.map((journey) => {
+            const label = journey.trainNumber && !journey.displayName.includes(journey.trainNumber) ? `${journey.displayName} (${journey.trainNumber})` : journey.displayName;
+            return <button key={journey.externalTripId} type="button" className="admin-whitelist-picker__item" aria-label={`Include ${label}`} onClick={() => { onToggleJourney(journey.externalTripId); setJourneySearch(""); }}>
+              <TrainLabel label={label} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} size="compact" cancelled={journey.status === "cancelled"} />
+            </button>;
+          })}
+        </div>}
+        <div className="admin-whitelist-picker__selected" aria-label="Selected trains">
+          <span className="field-label">Selected trains</span>
+          {selectedFetchedJourneys.length === 0 ? <p className="field-help">No trains selected.</p> : <div className="admin-whitelist-picker__list">
+            {selectedFetchedJourneys.map((journey) => {
+              const label = journey.trainNumber && !journey.displayName.includes(journey.trainNumber) ? `${journey.displayName} (${journey.trainNumber})` : journey.displayName;
+              return <button key={journey.externalTripId} type="button" className="admin-whitelist-picker__item selected" aria-label={`Remove ${label}`} aria-pressed="true" onClick={() => onToggleJourney(journey.externalTripId)}>
+                <TrainLabel label={label} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} size="compact" cancelled={journey.status === "cancelled"} />
+              </button>;
+            })}
+          </div>}
+        </div>
+      </section>
       {(!validStarRange || !validDelayRange) && <p className="error" role="alert">Filter ranges must have valid minimum and maximum values.</p>}
       <p className="field-help">Showing {visibleJourneys.length} of {journeys.length} candidates with complete RPG ratings.</p>
       <div className="journey-list" aria-label="Candidate journeys">{visibleJourneys.map((journey) => <JourneyCard key={journey.externalTripId} journey={journey} mode="admin" selected={selectedJourneyIds.includes(journey.externalTripId)} onToggle={(selectedJourney) => onToggleJourney(selectedJourney.externalTripId)} />)}</div>
@@ -596,9 +795,6 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
     <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
     <div className="train-map__legend" aria-label="Map legend">
       <span><i className="train-map__legend-swatch train-map__legend-swatch--route" />Route</span>
-      <span><i className="train-map__legend-swatch train-map__legend-swatch--mine" />Your train</span>
-      <span><i className="train-map__legend-swatch train-map__legend-swatch--leader" />Leading</span>
-      <span><i className="train-map__legend-swatch train-map__legend-swatch--cancelled" />Cancelled</span>
       <span><i className="train-map__legend-event" />Disruption</span>
       <span><i className="train-map__legend-event train-map__legend-event--construction" />Baustelle</span>
       <span><i className="train-map__legend-event train-map__legend-event--football" />Football</span>
@@ -626,7 +822,8 @@ export function TrainMapView({ journeys, mapEvents = [], selectedTrainId, liveEn
       const markerIndex = points.indexOf(markerPoint ?? points[0]);
       const markerDirection = directionAngle(points, markerIndex);
       const lineName = journey.lineName ?? journey.displayName.match(/^([^\s(]+(?:\s*\d+[A-Z]?))/i)?.[1] ?? journey.displayName;
-      const safeDisplayName = lineName.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+      const gameEmoji = gameNameEmoji(journey.history?.lineGameName);
+      const safeDisplayName = `${gameEmoji ? `${gameEmoji} ` : ""}${lineName}`.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
       const labelDelay = raceDelayMinutes === null || raceDelayMinutes === undefined ? "" : ` · ${raceDelayMinutes >= 0 ? "+" : "−"}${Math.abs(raceDelayMinutes)} min`;
       const labelState = cancelled ? " · CANCELLED · WINNER" : isLeading ? " · LEADING" : "";
       const trainIcon = new DivIcon({ className: "train-map__marker-icon", html: `<span class="train-map__marker-label ds-train-label ds-train-label--compact ${cancelled ? "is-cancelled" : ""}" style="--train-marker-color:${markerColor}">${safeDisplayName}${labelDelay}${labelState}</span><span class="train-map__marker" aria-label="${cancelled ? "Train cancelled" : finished ? "Train finished" : "Train direction"}" style="--train-marker-color:${markerColor};--train-marker-angle:${markerDirection}deg"><span class="train-map__marker-arrow" aria-hidden="true">${cancelled ? "×" : finished ? "✓" : "➜"}</span></span>`, iconSize: [24, 42], iconAnchor: [12, 12] });

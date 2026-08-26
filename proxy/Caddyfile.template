@@ -1,0 +1,22 @@
+# DelayRace int.bahn.de relay.
+# This file is rendered by install-mac-relay.sh. It must only listen on the
+# Mac's Tailscale address, never on a public interface.
+
+{
+	# The relay is private HTTP inside Tailscale; TLS terminates at int.bahn.de.
+	auto_https off
+}
+
+http://__TAILSCALE_IP__:8088 {
+	@bahn_api path /web/api/reiseloesung/*
+
+	handle @bahn_api {
+		reverse_proxy https://int.bahn.de {
+			header_up Host int.bahn.de
+		}
+	}
+
+	handle {
+		respond "not found" 404
+	}
+}

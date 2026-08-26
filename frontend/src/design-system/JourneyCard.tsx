@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import type { Journey } from "../api/client";
-import { Badge } from "./components";
+import { Badge, DelayBadge } from "./components";
 import { JourneyHeaderView } from "./JourneyHeaderView";
 import { journeyToLeg } from "./journeyToLeg";
-import { TrainLabel } from "./TrainLabel";
+import { TrainLabel, TrainLabelButton } from "./TrainLabel";
 
 export type JourneyCardMode = "public" | "admin" | "leaderboard";
 export type JourneyCardBettor = { participantId: string; username: string };
@@ -20,6 +20,7 @@ export type JourneyCardProps = {
   raceStatus?: string;
   onSelect?: (journey: Journey) => void;
   onToggle?: (journey: Journey) => void;
+  onTrainLabelClick?: () => void;
   className?: string;
   showBettingInfo?: boolean;
 };
@@ -71,15 +72,13 @@ function ratingStars(value: number | null | undefined) {
   </span>;
 }
 
-export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, raceStatus, bettors = [], currentParticipantId, onSelect, onToggle, className = "", showBettingInfo = true }: JourneyCardProps) {
+export function JourneyCard({ journey, mode = "public", selected = false, disabled = false, position, raceStatus, bettors = [], currentParticipantId, onSelect, onToggle, onTrainLabelClick, className = "", showBettingInfo = true }: JourneyCardProps) {
   const leg = journeyToLeg(journey);
   const status = journeyStatus(journey);
   const isDisabled = disabled || (mode === "admin" && status?.blocked === true);
   const isCurrentUser = bettors.some((bettor) => bettor.participantId === currentParticipantId);
   const rankLabel = position === 1 ? "🥇" : position === 2 ? "🥈" : position === 3 ? "🥉" : formatPlace(position);
-  const delayBadge = journey.raceDelayMinutes !== null && journey.raceDelayMinutes !== undefined && journey.raceDelayMinutes >= 0
-    ? `+${journey.raceDelayMinutes} min`
-    : null;
+  const delayBadge = journey.raceDelayMinutes !== null && journey.raceDelayMinutes !== undefined && journey.raceDelayMinutes >= 0 ? journey.raceDelayMinutes : null;
   const selectable = (mode === "public" || mode === "leaderboard" || mode === "admin") && Boolean(onSelect || onToggle) && !isDisabled;
   const selectJourney = () => mode === "admin" ? onToggle?.(journey) : onSelect?.(journey);
   const departureInfo = formatDepartureInfo(journey);
@@ -94,15 +93,15 @@ export function JourneyCard({ journey, mode = "public", selected = false, disabl
     {mode === "leaderboard" && <div className="ds-journey-card__leaderboard-top">
       <div className="ds-journey-card__labels">
         <strong className="ds-journey-card__position"><Badge variant="clear" className="journey-card__rank-badge">{rankLabel}</Badge></strong>
-        <TrainLabel label={leg.lineName} trainId={journey.id} raceColor={journey.raceColor} size="large" cancelled={leg.cancelled} />
+        {onTrainLabelClick ? <TrainLabelButton label={leg.lineName} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} cancelled={leg.cancelled} onClick={onTrainLabelClick} /> : <TrainLabel label={leg.lineName} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} size="compact" cancelled={leg.cancelled} />}
         {isCurrentUser && <Badge variant="blue">My train</Badge>}
         {raceStatus && <Badge variant={raceStatus.includes("CANCELLED") || raceStatus === "OUT OF THE RACE" ? "red" : "secondary"}>{raceStatus}</Badge>}
         {journey.liveStatus === "arrived" && <Badge variant="green">Arrived</Badge>}
       </div>
-      {delayBadge && <Badge variant="clear" className="journey-card__delay-badge">{delayBadge}</Badge>}
+      {delayBadge !== null && <DelayBadge minutes={delayBadge} />}
     </div>}
     {mode !== "leaderboard" && <div className="ds-journey-cell__line">
-      <TrainLabel label={leg.lineName} trainId={journey.id} raceColor={journey.raceColor} size="regular" cancelled={leg.cancelled} />
+      <TrainLabel label={leg.lineName} gameName={journey.history?.lineGameName} trainId={journey.id} raceColor={journey.raceColor} size="compact" cancelled={leg.cancelled} />
     </div>}
     {(mode === "public" || mode === "admin") && <section className="rpg-train-card" aria-label="Train characteristics">
       <div className="rpg-train-card__identity"><span className="rpg-train-card__emoji" aria-hidden="true">🚆</span><strong>{gameName}</strong><span>{leg.lineName ?? journey.displayName}</span>{gameDescription && <p className="rpg-train-card__description">{gameDescription}</p>}</div>

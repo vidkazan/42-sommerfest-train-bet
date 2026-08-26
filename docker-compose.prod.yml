@@ -35,6 +35,9 @@ services:
       - "127.0.0.1:${BACKEND_PORT:-3001}:3001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - trips_history_private
     volumes:
       - sqlite_data:/data
     healthcheck:
@@ -45,3 +48,8 @@ services:
 
 volumes:
   sqlite_data:
+
+networks:
+  trips_history_private:
+    external: true
+    name: trips-history_private

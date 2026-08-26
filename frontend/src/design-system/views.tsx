@@ -12,6 +12,8 @@ import { applyHistoryRatings } from "../historyRatings";
 import { RaceStage } from "./RaceStage";
 import { gameNameEmoji, TrainLabel, TrainLabelButton } from "./TrainLabel";
 
+const publicGamePath = (gameId: string) => `${import.meta.env.BASE_URL}game/${gameId}`;
+
 export type PublicView = "browse" | "progress" | "race" | "leaderboard" | "events";
 export type ViewStatus = "waiting" | "waiting_for_departure" | "in_progress" | "arrived" | "cancelled" | "stale";
 export type LiveLeaderboardEntry = {
@@ -508,7 +510,7 @@ export function AdminGameListView({ games, loading, error, message, onDelete, on
         <strong>{game.name}</strong>
         <span>{game.eventDate} · {game.status}</span>
         <span>{game.bettingStart ? `${new Date(game.bettingStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${game.bettingEnd ? new Date(game.bettingEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : ""}</span>
-        <div className="admin-game-actions"><a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a>{game.status === "draft" && <Button type="button" variant="secondary" disabled={loading} onClick={() => onContinue(game)}>Continue</Button>}{game.status === "active" && <Button type="button" variant="secondary" disabled={loading} onClick={() => { if (window.confirm("Populate every included train with one demo bet?")) onPopulateBets(game); }}>{loading ? "Populating…" : "Populate all trains with demo bets"}</Button>}{(game.status === "active" || game.status === "finished") && <Button type="button" variant="secondary" onClick={() => onDashboard(game)}>Dashboard</Button>}</div>
+        <div className="admin-game-actions"><a href={publicGamePath(game.id)} target="_blank" rel="noreferrer">Open public game</a>{game.status === "draft" && <Button type="button" variant="secondary" disabled={loading} onClick={() => onContinue(game)}>Continue</Button>}{game.status === "active" && <Button type="button" variant="secondary" disabled={loading} onClick={() => { if (window.confirm("Populate every included train with one demo bet?")) onPopulateBets(game); }}>{loading ? "Populating…" : "Populate all trains with demo bets"}</Button>}{(game.status === "active" || game.status === "finished") && <Button type="button" variant="secondary" onClick={() => onDashboard(game)}>Dashboard</Button>}</div>
         <Button type="button" variant="secondary" onClick={() => onDelete(game)}>Delete game</Button>
       </article>)}
     </div>}{message && <p className="field-help" role="status">{message}</p>}
@@ -657,7 +659,7 @@ export function AdminReviewView({ game, journeys, minimumDuration, minimumStars,
 }
 
 export function AdminActiveView({ game }: AdminActiveViewProps) {
-  return <section aria-label="Active game"><h2>{game.name}</h2><StatusBadge variant="success">Active</StatusBadge><p>Game is live and the journey whitelist is locked.</p><a href={`/game/${game.id}`} target="_blank" rel="noreferrer">Open public game</a></section>;
+  return <section aria-label="Active game"><h2>{game.name}</h2><StatusBadge variant="success">Active</StatusBadge><p>Game is live and the journey whitelist is locked.</p><a href={publicGamePath(game.id)} target="_blank" rel="noreferrer">Open public game</a></section>;
 }
 
 function MapResizeHandler() {

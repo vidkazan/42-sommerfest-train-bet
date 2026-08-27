@@ -673,17 +673,18 @@ function App() {
         <BetView {...betViewProps} actionsOnly />
       </> : <Card>
         <nav className="view-tabs" aria-label="Game views">
+          {hasConfirmedBet && <BadgeButton type="button" className={`results-tab ds-text-medium ${publicView === "results" ? "active" : ""}`.trim()} onClick={() => setPublicView("results")}>Results</BadgeButton>}
           {canShowRace && <BadgeButton type="button" className={`ds-text-medium ${publicView === "race" ? "active" : ""}`.trim()} onClick={() => setPublicView("race")}>Race</BadgeButton>}
           {!betSubmitted && !bettingClosed && <BadgeButton type="button" className={`ds-text-medium ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
-          <ReplayBadge active={publicReplayActive} replayTimestamp={publicReplayFrame?.timestamp} onSkip={skipPublicReplay} />
+          {publicView === "race" && <ReplayBadge active={publicReplayActive} replayTimestamp={publicReplayFrame?.timestamp} onSkip={skipPublicReplay} />}
           <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>
         </nav>
         {hasConfirmedBet && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} nextUpdateAt={nextProgressUpdateAt} updating={progressUpdating} replayEntries={replayBettedEntries} replayTimestamp={publicReplayFrame?.timestamp} onSelectTrain={selectTrain} onOpenBets={() => setPublicView("leaderboard")} />}
-        {hasConfirmedBet && publicView === "leaderboard" && !loading && !error && <LeaderboardView
+        {hasConfirmedBet && publicView === "results" && !loading && !error && <LeaderboardView
           entries={bettedEntries}
           journeys={journeys}
           currentParticipantId={storedUserId}
@@ -696,12 +697,23 @@ function App() {
           myUsername={username}
           myBetPlace={bettedEntries.find((entry) => entry.trainId === myTrainId)?.position ?? null}
           myBetWon={Boolean(results?.winners.some((winner) => winner.trainId === myTrainId))}
+          resultsView
+        />}
+        {hasConfirmedBet && publicView === "leaderboard" && !loading && !error && <LeaderboardView
+          entries={bettedEntries}
+          journeys={journeys}
+          currentParticipantId={storedUserId}
+          selectedTrainId={selectedTrainId}
+          onSelectTrain={selectTrain}
+          lastUpdatedAt={leaderboardUpdatedAt}
+          stale={leaderboardStale}
         />}
         {hasConfirmedBet && publicView === "events" && !loading && !error && <LiveEventsView myTrainId={myTrainId} events={bettedLiveEvents} entries={bettedEntries} journeys={journeys} onSelectTrain={selectTrain} />}
         {loading && <p role="status">Loading journeys…</p>}
         {!loading && error && <p role="alert">{error}</p>}
         {!loading && !error && game && journeys.length === 0 && <p>No journeys are available yet.</p>}
       </Card>}
+      {hasConfirmedBet && publicView === "results" && <a className="ds-badge ds-badge-button results-feedback" href="https://docs.google.com/forms/d/1vHIjIAnIFgTSQVf4G7Ca2ZLHOULy-ygE-YgGNs34yXo/" target="_blank" rel="noreferrer">🥴Leave a feedback😍</a>}
     </main>
   );
 }

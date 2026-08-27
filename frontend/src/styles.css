@@ -17,6 +17,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ds-replay-badge__close { align-items: center; background: transparent; border-radius: var(--ds-radius-pill); color: #111; display: inline-flex; font-size: var(--ds-font-medium); height: 1.5rem; justify-content: center; line-height: 1; padding: 0; width: 1.5rem; }
 .ds-replay-badge__close:hover:not(:disabled) { background: rgb(0 0 0 / 12%); color: #111; filter: none; }
 .app-shell { display: grid; gap: var(--ds-space-4); margin: 0 auto; max-width: 1100px; min-width: 0; padding: var(--ds-space-4); }
+.home-shell { display: flex; flex-direction: column; max-width: 30rem; width: 100%; }
+.home-content { display: flex; flex-direction: column; gap: var(--ds-space-4); min-width: 0; }
 .brand-header { align-items: center; display: flex; gap: var(--ds-space-3); }
 .brand-header__logo { background: var(--ds-surface-muted); border-radius: var(--ds-radius-md); height: 3.5rem; object-fit: cover; width: 3.5rem; }
 .brand-header__name { color: var(--ds-text-primary); font-size: 1.2rem; font-weight: 800; letter-spacing: -.02em; }
@@ -32,12 +34,12 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .home-hero p:last-child { font-size: 1.05rem; }
 .home-how, .home-previews { display: grid; gap: var(--ds-space-3); }
 .home-how h2, .home-previews h2 { margin-bottom: 0; }
-.home-steps { display: grid; gap: var(--ds-space-3); grid-template-columns: repeat(3, 1fr); }
+.home-steps { display: grid; gap: var(--ds-space-3); grid-template-columns: 1fr; }
 .home-steps article, .home-preview { background: var(--ds-surface-muted); border: 1px solid var(--ds-border-subtle); border-radius: var(--ds-radius-md); padding: var(--ds-space-3); }
 .home-steps article > span { align-items: center; background: var(--ds-accent-blue); border-radius: 50%; display: flex; font-weight: 800; height: 1.8rem; justify-content: center; width: 1.8rem; }
 .home-steps h3, .home-steps p, .home-preview h3, .home-preview p { margin-bottom: var(--ds-space-2); }
 .home-steps p, .home-preview p { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
-.home-preview-grid { display: grid; gap: var(--ds-space-3); grid-template-columns: repeat(3, 1fr); }
+.home-preview-grid { display: grid; gap: var(--ds-space-3); grid-template-columns: 1fr; }
 .home-preview h3 { font-size: 1.1rem; }
 .home-preview__sample { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-sm); display: grid; gap: var(--ds-space-2); min-height: 9rem; padding: var(--ds-space-2); }
 .home-preview__sample > strong { font-size: var(--ds-font-small); }
@@ -68,7 +70,6 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .home-game:hover { border-color: var(--ds-focus-ring); }
 .home-game span { color: var(--ds-text-muted); font-size: var(--ds-font-small); }
 .home-game span:last-child { color: var(--ds-accent-blue); font-weight: 700; }
-@media (max-width: 799px) { .home-steps, .home-preview-grid { grid-template-columns: 1fr; } }
 .map-placeholder { align-items: center; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-lg); display: flex; flex: 1; justify-content: center; min-height: 52vh; position: relative; }
 .train-map { border-radius: var(--ds-radius-lg); height: clamp(160px, 29vh, 320px); overflow: hidden; width: 100%; }
 .public-map--bet .train-map { height: clamp(240px, 43.5vh, 480px); }
@@ -596,4 +597,4 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-stage--public .admin-race-row__status > span:first-child { display: block; flex: 0 0 auto; }
   .race-chart-view .race-stage--public .admin-race-row__trend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
-@media (min-width: 800px) { .app-shell { grid-template-columns: 1.5fr 1fr; } .public-shell { grid-template-columns: 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }
+@media (min-width: 800px) { .app-shell:not(.home-shell) { grid-template-columns: 1.5fr 1fr; } .public-shell { grid-template-columns: 1fr; } .hero { grid-column: 1 / -1; } .map-placeholder { min-height: 70vh; } .card, .ds-card { align-self: center; } }

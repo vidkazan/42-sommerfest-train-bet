@@ -624,7 +624,7 @@ function App() {
   };
 
   if (mode === "home") {
-    return <main className="app-shell home-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><HomeView games={activeGames} loading={homeLoading} error={homeError} /></main>;
+    return <main className="app-shell home-shell"><div className="home-content"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><HomeView games={activeGames} loading={homeLoading} error={homeError} /></div></main>;
   }
 
   if (mode === "not-found") {

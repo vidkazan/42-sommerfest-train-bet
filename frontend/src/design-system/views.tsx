@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import type { AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, SkippedDisruption, Station } from "../api/client";
+import type { AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, ReplaySnapshot, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
 import { Badge, BadgeButton, Button, DelayBadge, Notice, ReplayBadge, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
@@ -23,7 +23,7 @@ export type LiveLeaderboardEntry = {
   stopCount: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null;
   cancelled: boolean; stale: boolean; bettors: Array<{ participantId: string; username: string }>; geometry?: string | null; routeJson?: string | null; stops?: LiveStop[];
   betCount?: number;
-  raceColor?: string | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }>;
+  raceColor?: string | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }>; replayHistory: ReplaySnapshot[];
 };
 export type GameHeaderViewProps = { eyebrow?: string; title: string; description: string };
 export type BrandHeaderProps = { logoSrc: string };
@@ -65,20 +65,20 @@ export function CountdownBadge({ label, target, variant = "blue" }: { label: str
   return <Badge variant={variant} className="admin-dashboard__countdown">{label} {value}</Badge>;
 }
 
-export function AdminDashboardView({ dashboard, nextUpdateAt, replayEntries, replayTimestamp, replayActive = false, onStartReplay, onSkipReplay }: { dashboard: AdminDashboard; nextUpdateAt?: number | null; replayEntries?: AdminDashboard["entries"]; replayTimestamp?: number; replayActive?: boolean; onStartReplay: () => void; onSkipReplay: () => void }) {
+export function AdminDashboardView({ dashboard, nextUpdateAt }: { dashboard: AdminDashboard; nextUpdateAt?: number | null }) {
   const finished = dashboard.state === "finished";
   const countdownLabel = dashboard.state === "waiting" ? "Starts in" : "Ends in";
   const countdownTarget = dashboard.state === "waiting" ? dashboard.game?.journeyDepartureStart : dashboard.game?.gameEndTime;
-  const visibleEntries = replayEntries ?? dashboard.entries;
+  const visibleEntries = dashboard.entries;
   const totalBets = visibleEntries.reduce((total, entry) => total + entry.betCount, 0);
   const stageEntries = visibleEntries.map((entry) => ({ ...entry, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes }));
   return <section className="admin-dashboard" aria-label="Race dashboard">
     <header className="admin-dashboard__header">
       <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
-      <div className="admin-dashboard__header-status">{onStartReplay ? <>{!finished && <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}<ReplayBadge active={replayActive} replayTimestamp={replayTimestamp} onReplay={onStartReplay} onSkip={onSkipReplay} /></> : finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
+      <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
     </header>
     <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} 🎲</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
-    <RaceStage entries={stageEntries} final={finished} referenceTime={replayTimestamp} animationDurationMs={replayEntries ? 800 : 4_000} />
+    <RaceStage entries={stageEntries} final={finished} animationDurationMs={4_000} />
   </section>;
 }
 
@@ -375,6 +375,7 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
   const stageEntries = visibleEntries.map((entry) => ({
     trainId: entry.trainId,
     displayName: entry.displayName,
+    scheduledDeparture: entry.scheduledDeparture,
     gameName: journeys.find((journey) => journey.id === entry.trainId)?.history?.lineGameName,
     scheduledArrival: entry.scheduledArrival,
     routeJson: entry.routeJson,
@@ -388,6 +389,7 @@ export function RaceChartView({ entries, journeys, currentParticipantId, final =
     betCount: entry.bettors.length,
     isMine: entry.bettors.some((bettor) => bettor.participantId === currentParticipantId),
     delayHistory: entry.delayHistory,
+    replayHistory: entry.replayHistory,
   }));
   const secondsUntilUpdate = nextUpdateAt ? Math.max(0, Math.ceil((nextUpdateAt - now) / 1_000)) : null;
   return <section className="race-chart-view" aria-label="Delay race">
@@ -697,6 +699,17 @@ function MapFitTrips({ points }: { points: Array<{ lat: number; lon: number }> }
   return null;
 }
 
+function MapSelectedLineHandler({ points, selectedTrainId }: { points: Array<{ lat: number; lon: number }>; selectedTrainId: string | null }) {
+  const map = useMap();
+  const pointsKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
+  useEffect(() => {
+    if (!selectedTrainId || !points.length) return;
+    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
+    map.flyToBounds(bounds, { padding: [48, 48], maxZoom: 10, duration: 0.8, easeLinearity: 0.25 });
+  }, [map, pointsKey, selectedTrainId]);
+  return null;
+}
+
 function decodePolyline(encoded: string): Array<{ lat: number; lon: number }> {
   const points: Array<{ lat: number; lon: number }> = [];
   let index = 0; let lat = 0; let lon = 0;
@@ -728,18 +741,6 @@ function trainPosition(journey: Journey, points: Array<{ lat: number; lon: numbe
   const progress = Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure
     ? Math.max(0, Math.min(1, (Date.now() - departure) / (arrival - departure))) : 0;
   return points[Math.min(points.length - 1, Math.floor(progress * (points.length - 1)))];
-}
-
-function MapSelectedLineHandler({ points, selectedTrainId }: { points: Array<{ lat: number; lon: number }>; selectedTrainId: string | null }) {
-  const map = useMap();
-  const pointsKey = points.map((point) => `${point.lat},${point.lon}`).join(";");
-  useEffect(() => {
-    if (!selectedTrainId || !points.length) return;
-    const bounds = new LatLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
-    map.once("moveend", () => map.setZoom(Math.min(map.getZoom() + mapZoomBoost, 18), { animate: true }));
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10, animate: true });
-  }, [map, pointsKey, selectedTrainId]);
-  return null;
 }
 
 function MapSelectedTrainPanes() {

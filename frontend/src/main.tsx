@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
-import { api, type AdminDashboard, type Game, type Journey, type LiveEvent, type Station } from "./api/client";
+import { api, type AdminDashboard, type Game, type Journey, type LiveEvent, type ReplaySnapshot, type Station } from "./api/client";
 import { AdminAccessView, AdminActiveView, AdminDashboardView, AdminGameListView, AdminReviewView, AdminSetupView, Badge, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, PlayerOnboarding, RaceChartView, ReplayBadge, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
@@ -31,7 +31,7 @@ const defaultGameSchedule = () => {
 const gameCreationDraftStorageKey = "choochoo_game_creation_draft";
 const replayFrameDurationMs = 1_000;
 const replayMinuteMs = 60_000;
-type ReplayableEntry = { trainId: string; raceDelayMinutes: number | null; currentDelayMinutes?: number | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }> };
+type ReplayableEntry = { trainId: string; raceDelayMinutes: number | null; currentDelayMinutes?: number | null; finalDelayMinutes?: number | null; status?: string; actualArrival?: string | null; actualDeparture?: string | null; routeJson?: string | null; delayHistory?: Array<{ delayMinutes: number; recordedAt: string }>; replayHistory?: ReplaySnapshot[] };
 type ReplayFrame<T> = { timestamp: number; entries: T[] };
 
 const readStoredTimestamp = (key: string) => {
@@ -44,18 +44,20 @@ const storeTimestamp = (key: string, value: number) => {
   try { localStorage.setItem(key, String(value)); } catch { /* local persistence is best effort */ }
 };
 function buildReplayFrames<T extends ReplayableEntry>(entries: T[], from: number, to: number): ReplayFrame<T>[] {
-  const timestamps = [...new Set(entries.flatMap((entry) => (entry.delayHistory ?? [])
+  const timestamps = [...new Set(entries.flatMap((entry) => (entry.replayHistory ?? entry.delayHistory ?? [])
     .map((snapshot) => Date.parse(snapshot.recordedAt))
     .filter((timestamp) => Number.isFinite(timestamp) && timestamp > from && timestamp <= to)
     .map((timestamp) => Math.floor(timestamp / replayMinuteMs) * replayMinuteMs)))].sort((left, right) => left - right);
   return timestamps.map((timestamp) => ({ timestamp, entries: entries.map((entry) => {
-    const candidates = (entry.delayHistory ?? []).filter((snapshot) => Date.parse(snapshot.recordedAt) <= timestamp + replayMinuteMs - 1);
+    const history = entry.replayHistory ?? (entry.delayHistory ?? []).map((snapshot) => ({ delayMinutes: snapshot.delayMinutes, currentDelayMinutes: snapshot.delayMinutes, departureDelayMinutes: null, finalDelayMinutes: null, status: entry.status ?? "in_progress", actualArrival: entry.actualArrival ?? null, actualDeparture: entry.actualDeparture ?? null, routeJson: entry.routeJson ?? null, recordedAt: snapshot.recordedAt }));
+    const candidates = history.filter((snapshot) => Date.parse(snapshot.recordedAt) <= timestamp + replayMinuteMs - 1);
     const snapshot = candidates[candidates.length - 1];
-    return snapshot ? { ...entry, raceDelayMinutes: snapshot.delayMinutes, currentDelayMinutes: snapshot.delayMinutes } : { ...entry, raceDelayMinutes: null, currentDelayMinutes: null };
+    const replayDelayHistory = history.filter((item) => Date.parse(item.recordedAt) <= timestamp + replayMinuteMs - 1 && item.delayMinutes !== null).map((item) => ({ delayMinutes: item.delayMinutes as number, recordedAt: item.recordedAt }));
+    return snapshot ? { ...entry, raceDelayMinutes: snapshot.delayMinutes, currentDelayMinutes: snapshot.currentDelayMinutes, finalDelayMinutes: snapshot.finalDelayMinutes, status: snapshot.status, actualArrival: snapshot.actualArrival, actualDeparture: snapshot.actualDeparture, routeJson: snapshot.routeJson ?? entry.routeJson, delayHistory: replayDelayHistory } : { ...entry, raceDelayMinutes: null, currentDelayMinutes: null, finalDelayMinutes: null, status: "waiting_for_departure", delayHistory: replayDelayHistory };
   }) }));
 }
 function earliestReplayTimestamp<T extends ReplayableEntry>(entries: T[], fallback: number) {
-  const timestamps = entries.flatMap((entry) => (entry.delayHistory ?? []).map((snapshot) => Date.parse(snapshot.recordedAt)).filter((timestamp) => Number.isFinite(timestamp)));
+  const timestamps = entries.flatMap((entry) => (entry.replayHistory ?? entry.delayHistory ?? []).map((snapshot) => Date.parse(snapshot.recordedAt)).filter((timestamp) => Number.isFinite(timestamp)));
   return timestamps.length > 0 ? Math.min(...timestamps) : fallback;
 }
 type GameCreationDraft = {
@@ -162,18 +164,11 @@ function App() {
   const [publicReplayRemainingSeconds, setPublicReplayRemainingSeconds] = useState(0);
   const [publicReplayActive, setPublicReplayActive] = useState(false);
   const [adminNextUpdateAt, setAdminNextUpdateAt] = useState<number | null>(null);
-  const [adminReplayFrames, setAdminReplayFrames] = useState<ReplayFrame<AdminDashboard["entries"][number]>[]>([]);
-  const [adminReplayIndex, setAdminReplayIndex] = useState(0);
-  const [adminReplayRemainingSeconds, setAdminReplayRemainingSeconds] = useState(0);
-  const [adminReplayActive, setAdminReplayActive] = useState(false);
   const publicReplayActiveRef = useRef(false);
-  const adminReplayActiveRef = useRef(false);
   const publicRequestRef = useRef(false);
   const adminRequestRef = useRef(false);
   const loadProgressRef = useRef<(() => Promise<void>) | null>(null);
-  const loadAdminRef = useRef<(() => Promise<void>) | null>(null);
   const latestPublicTimestampRef = useRef<number | null>(null);
-  const latestAdminTimestampRef = useRef<number | null>(null);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [results, setResults] = useState<{ status: string; final: boolean; winners: Array<{ username: string; delaySeconds: number; outcome?: "delay" | "cancellation"; position?: number; trainId?: string; trainName?: string; raceColor?: string | null; bettors?: string[] }>; trains: unknown[] } | null>(null);
 
@@ -220,15 +215,7 @@ function App() {
   };
 
   const acceptAdminDashboard = (next: AdminDashboard) => {
-    const gameId = next.game?.id;
-    const latestTimestamp = next.lastUpdatedAt ? Date.parse(next.lastUpdatedAt) : Math.max(...next.entries.flatMap((entry) => entry.delayHistory.map((snapshot) => Date.parse(snapshot.recordedAt))), 0);
-    const previousTimestamp = gameId ? readStoredTimestamp(`choochoo-race-last-viewed:admin:${gameId}`) : null;
-    const frames = gameId && previousTimestamp && latestTimestamp > previousTimestamp + replayMinuteMs ? buildReplayFrames(next.entries, previousTimestamp, latestTimestamp) : [];
-    latestAdminTimestampRef.current = latestTimestamp || null;
     setAdminDashboard(next);
-    if (frames.length > 0 && !adminReplayActiveRef.current) {
-      adminReplayActiveRef.current = true; setAdminReplayFrames(frames); setAdminReplayIndex(0); setAdminReplayRemainingSeconds(frames.length); setAdminReplayActive(true); setAdminNextUpdateAt(null);
-    } else if (!adminReplayActiveRef.current && gameId && latestTimestamp && document.visibilityState === "visible") storeTimestamp(`choochoo-race-last-viewed:admin:${gameId}`, latestTimestamp);
   };
 
   useEffect(() => {
@@ -281,7 +268,7 @@ function App() {
         setSelectedTrainId(participant.trainId);
         setBetSubmitted(true);
         setHasConfirmedBet(true);
-        setPublicView("progress");
+        setPublicView("race");
       }).catch(() => {
         localStorage.removeItem("trainbet_user");
         setStoredUserId(null);
@@ -382,57 +369,20 @@ function App() {
     let active = true;
     const refreshDashboard = async () => {
       try {
-        if (!adminDashboard?.game?.id || adminRequestRef.current || adminReplayActiveRef.current) return;
+        if (!adminDashboard?.game?.id || adminRequestRef.current) return;
         adminRequestRef.current = true;
         const next = await api.getAdminDashboard(adminDashboard.game.id, adminToken);
         if (active) acceptAdminDashboard(next);
       } catch { /* keep the last dashboard snapshot visible */ }
       finally { adminRequestRef.current = false; }
-      if (active && !adminReplayActiveRef.current) setAdminNextUpdateAt(Date.now() + 60_000);
+      if (active) setAdminNextUpdateAt(Date.now() + 60_000);
     };
     const refreshOnReturn = () => { if (document.visibilityState === "visible") void refreshDashboard(); };
     window.addEventListener("visibilitychange", refreshOnReturn);
     window.addEventListener("pageshow", refreshOnReturn);
-    loadAdminRef.current = refreshDashboard;
     const timer = window.setInterval(refreshDashboard, 60_000);
-    return () => { active = false; adminRequestRef.current = false; loadAdminRef.current = null; window.clearInterval(timer); window.removeEventListener("visibilitychange", refreshOnReturn); window.removeEventListener("pageshow", refreshOnReturn); };
+    return () => { active = false; adminRequestRef.current = false; window.clearInterval(timer); window.removeEventListener("visibilitychange", refreshOnReturn); window.removeEventListener("pageshow", refreshOnReturn); };
   }, [adminDashboard?.game?.id, adminToken, adminView]);
-
-  useEffect(() => {
-    if (!adminReplayActive || adminReplayFrames.length === 0 || !adminDashboard?.game?.id) return;
-    const replayKey = `choochoo-race-last-viewed:admin:${adminDashboard.game.id}`;
-    const timer = window.setInterval(() => {
-      setAdminReplayIndex((current) => {
-        if (current + 1 >= adminReplayFrames.length) {
-          adminReplayActiveRef.current = false; setAdminReplayActive(false); setAdminReplayFrames([]); setAdminReplayRemainingSeconds(0);
-          if (latestAdminTimestampRef.current) storeTimestamp(replayKey, latestAdminTimestampRef.current);
-          setAdminNextUpdateAt(Date.now() + 60_000);
-          void loadAdminRef.current?.();
-          return 0;
-        }
-        setAdminReplayRemainingSeconds((seconds) => Math.max(0, seconds - 1));
-        return current + 1;
-      });
-    }, replayFrameDurationMs);
-    return () => window.clearInterval(timer);
-  }, [adminReplayActive, adminReplayFrames.length, adminDashboard?.game?.id]);
-
-  const skipAdminReplay = () => {
-    if (!adminReplayActive) return;
-    adminReplayActiveRef.current = false; setAdminReplayActive(false); setAdminReplayFrames([]); setAdminReplayIndex(0); setAdminReplayRemainingSeconds(0);
-    if (adminDashboard?.game?.id && latestAdminTimestampRef.current) storeTimestamp(`choochoo-race-last-viewed:admin:${adminDashboard.game.id}`, latestAdminTimestampRef.current);
-    setAdminNextUpdateAt(Date.now() + 60_000);
-    void loadAdminRef.current?.();
-  };
-
-  const startAdminReplay = () => {
-    if (adminReplayActiveRef.current || !adminDashboard) return;
-    const latestTimestamp = latestAdminTimestampRef.current ?? Date.now();
-    const firstTimestamp = earliestReplayTimestamp(adminDashboard.entries, latestTimestamp);
-    const frames = buildReplayFrames(adminDashboard.entries, firstTimestamp - 1, latestTimestamp);
-    if (frames.length === 0) return;
-    adminReplayActiveRef.current = true; setAdminReplayFrames(frames); setAdminReplayIndex(0); setAdminReplayRemainingSeconds(frames.length); setAdminReplayActive(true); setAdminNextUpdateAt(null);
-  };
 
   const openAdminDashboard = async (gameToShow: Game) => {
     if (!adminToken) return;
@@ -507,7 +457,7 @@ function App() {
       setStoredUserId(participant.participantId);
       setBetSubmitted(true);
       setHasConfirmedBet(true);
-      setPublicView("progress");
+      setPublicView("race");
     } catch (reason: unknown) {
       setBetError(reason instanceof Error ? reason.message : "Could not submit bet");
     } finally {
@@ -684,8 +634,7 @@ function App() {
 
   if (mode === "admin") {
     if (adminView === "dashboard" && adminDashboard) {
-      const replayFrame = adminReplayActive ? adminReplayFrames[adminReplayIndex] : undefined;
-      return <main className="admin-dashboard-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><AdminDashboardView key={adminDashboard.game?.id ?? "dashboard"} dashboard={adminDashboard} nextUpdateAt={adminNextUpdateAt} replayEntries={replayFrame?.entries} replayTimestamp={replayFrame?.timestamp} replayActive={adminReplayActive} onStartReplay={startAdminReplay} onSkipReplay={skipAdminReplay} /></main>;
+      return <main className="admin-dashboard-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><AdminDashboardView key={adminDashboard.game?.id ?? "dashboard"} dashboard={adminDashboard} nextUpdateAt={adminNextUpdateAt} /></main>;
     }
     return (
       <main className="app-shell">
@@ -719,19 +668,19 @@ function App() {
   const bettedLiveEvents = liveEvents.filter((event) => Boolean(event.trainId && bettedTrainIds.has(event.trainId)));
   const myTrainId = bettedEntries.find((entry) => entry.bettors.some((bettor) => bettor.participantId === storedUserId))?.trainId ?? null;
   const betViewProps = { journeys, selectedTrainId, username, betSubmitted, loading: betLoading, error: betError, usernameCheckLoading, usernameCheckError, onSelectTrain: selectTrain, onUsernameChange: (value: string) => { setUsername(value); setUsernameCheckError(null); }, onCheckUsername: checkUsername, onSubmit: submitBet };
-  const canShowRace = liveStateVisible && bettedEntries.length > 1;
+  const canShowRace = liveStateVisible && bettedEntries.length > 0;
 
   return (
     <main className="app-shell public-shell">
       <BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} />
-      <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />
+      {publicView === "browse" && <GameHeader title="Which train will pick up the most delay?" description="Pick a train and watch the race live. The biggest delay at its final stop wins." />}
       {game && <div className="public-help"><Button type="button" variant="secondary" onClick={() => setOnboardingOpen(true)}>How it works</Button></div>}
       <PlayerOnboarding open={onboardingOpen} onClose={closeOnboarding} />
-      <section aria-label="Train map">
+      {publicView === "browse" && <section className="public-map public-map--bet" aria-label="Train map">
         {!loading && liveJourneys.length > 0
           ? <TrainMapView journeys={liveJourneys} mapEvents={game?.mapEvents} selectedTrainId={selectedTrainId} currentParticipantId={storedUserId} onSelect={selectTrain} liveEntries={liveStateVisible ? bettedEntries : leaderboard} />
           : <div className="map-placeholder"><TrainIcon label="Train map" /><span className="map-label">Train map</span></div>}
-      </section>
+      </section>}
       {!betSubmitted && !bettingClosed && publicView === "browse" && !loading && !error && game && journeys.length > 0 ? <>
         <Card className="bet-card-only"><BetView {...betViewProps} cardsOnly /></Card>
         <BetView {...betViewProps} actionsOnly />

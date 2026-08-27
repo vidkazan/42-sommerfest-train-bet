@@ -24,7 +24,7 @@ export function BadgeButton({ children, className = "", ...props }: { children: 
 }
 export function ReplayBadge({ active = false, replayTimestamp, onReplay, onSkip }: { active?: boolean; replayTimestamp?: number; onReplay: () => void; onSkip: () => void }) {
   const replayTime = replayTimestamp === undefined ? null : new Date(replayTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return <Badge variant="secondary" className="ds-replay-badge">{active && replayTime ? <span role="status">Replay {replayTime}</span> : <button type="button" className="ds-replay-badge__launch" onClick={onReplay}>Replay from start</button>}<button type="button" className="ds-replay-badge__close" onClick={onSkip} aria-label="Skip replay">×</button></Badge>;
+  return <Badge variant="yellow" className="ds-replay-badge">{active && replayTime ? <span className="ds-replay-badge__time" key={replayTimestamp} role="status">Replay {replayTime}</span> : <button type="button" className="ds-replay-badge__launch" onClick={onReplay}>Replay</button>}<button type="button" className="ds-replay-badge__close" onClick={onSkip} aria-label="Skip replay">×</button></Badge>;
 }
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`ds-card ${className}`.trim()}>{children}</section>;

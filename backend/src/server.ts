@@ -29,7 +29,6 @@ app.addHook("onResponse", async (request, reply) => {
   log.call(request.log, { method: request.method, url: request.url, statusCode }, "Request completed");
 });
 const transitUserAgent = "42SommerfestTrainBet/0.1";
-const delaySnapshotRetentionMs = 24 * 60 * 60_000;
 const berlinDefaultSchedule = () => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Berlin", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
@@ -173,6 +172,21 @@ db.exec(`
     recorded_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_delay_snapshots_lookup ON journey_delay_snapshots(game_id, journey_id, recorded_at);
+  CREATE TABLE IF NOT EXISTS journey_progress_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT NOT NULL REFERENCES games(id),
+    journey_id TEXT NOT NULL REFERENCES game_journeys(id),
+    delay_minutes INTEGER,
+    current_delay_minutes INTEGER,
+    departure_delay_minutes INTEGER,
+    final_delay_minutes INTEGER,
+    status TEXT NOT NULL,
+    actual_arrival TEXT,
+    actual_departure TEXT,
+    route_json TEXT,
+    recorded_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_progress_snapshots_lookup ON journey_progress_snapshots(game_id, journey_id, recorded_at);
 `);
 
 const columns = (table: string) => new Set(
@@ -430,6 +444,43 @@ const parseJourneyStops = (routeJson: string | null | undefined) => {
   }
 };
 
+type ReplaySnapshot = {
+  delayMinutes: number | null;
+  currentDelayMinutes: number | null;
+  departureDelayMinutes: number | null;
+  finalDelayMinutes: number | null;
+  status: string;
+  actualArrival: string | null;
+  actualDeparture: string | null;
+  routeJson: string | null;
+  recordedAt: string;
+};
+
+const getReplaySnapshots = (gameId: string) => {
+  const rows = db.prepare(`SELECT delay_minutes AS delayMinutes, current_delay_minutes AS currentDelayMinutes,
+      departure_delay_minutes AS departureDelayMinutes, final_delay_minutes AS finalDelayMinutes,
+      status, actual_arrival AS actualArrival, actual_departure AS actualDeparture,
+      route_json AS routeJson, journey_id AS journeyId, recorded_at AS recordedAt
+    FROM journey_progress_snapshots WHERE game_id = ? ORDER BY recorded_at ASC, id ASC`).all(gameId) as Array<ReplaySnapshot & { journeyId: string }>;
+  const snapshotsByJourney = new Map<string, ReplaySnapshot[]>();
+  for (const row of rows) {
+    const { journeyId, ...snapshot } = row;
+    const history = snapshotsByJourney.get(journeyId) ?? [];
+    history.push(snapshot);
+    snapshotsByJourney.set(journeyId, history);
+  }
+  if (snapshotsByJourney.size > 0) return snapshotsByJourney;
+
+  const legacyRows = db.prepare(`SELECT journey_id AS journeyId, delay_minutes AS delayMinutes, recorded_at AS recordedAt
+    FROM journey_delay_snapshots WHERE game_id = ? ORDER BY recorded_at ASC, id ASC`).all(gameId) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
+  for (const row of legacyRows) {
+    const history = snapshotsByJourney.get(row.journeyId) ?? [];
+    history.push({ delayMinutes: row.delayMinutes, currentDelayMinutes: row.delayMinutes, departureDelayMinutes: null, finalDelayMinutes: null, status: "in_progress", actualArrival: null, actualDeparture: null, routeJson: null, recordedAt: row.recordedAt });
+    snapshotsByJourney.set(row.journeyId, history);
+  }
+  return snapshotsByJourney;
+};
+
 const calculateSelectedHistoryRatings = (gameId: string) => {
   const rows = db.prepare("SELECT id, history_json AS historyJson, duration_seconds AS durationSeconds FROM game_journeys WHERE game_id = ? AND included = 1")
     .all(gameId) as Array<{ id: string; historyJson: string | null; durationSeconds: number | null }>;
@@ -479,6 +530,7 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/remove", async (reque
       )`).run(game.id, game.id);
     db.prepare("DELETE FROM participants WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM journey_delay_snapshots WHERE game_id = ?").run(game.id);
+    db.prepare("DELETE FROM journey_progress_snapshots WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_map_events WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_journeys WHERE game_id = ?").run(game.id);
     db.prepare("DELETE FROM game_events WHERE game_id = ?").run(game.id);
@@ -806,6 +858,11 @@ app.post<{ Params: { id: string } }>("/api/admin/games/:id/confirm", async (requ
       .run(selected.latestScheduledArrival, now, now, game.id);
     db.prepare(`INSERT INTO game_events (id, game_id, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)`)
       .run(crypto.randomUUID(), game.id, "game_confirmed", JSON.stringify({ selectedCount: selected.count, calculatedGameEndTime: selected.latestScheduledArrival }), now);
+    const initialSnapshot = db.prepare(`INSERT INTO journey_progress_snapshots
+      (game_id, journey_id, delay_minutes, current_delay_minutes, departure_delay_minutes, final_delay_minutes, status, actual_arrival, actual_departure, route_json, recorded_at)
+      SELECT game_id, id, NULL, NULL, NULL, NULL, 'waiting_for_departure', actual_arrival, actual_departure, route_json, ?
+      FROM game_journeys WHERE game_id = ? AND included = 1`);
+    initialSnapshot.run(now, game.id);
   });
   confirm();
 
@@ -880,15 +937,8 @@ const getAdminDashboardSnapshot = (gameId?: string) => {
       AND EXISTS (SELECT 1 FROM bets WHERE bets.game_id = ? AND bets.train_id = game_journeys.id)
     ORDER BY scheduled_departure ASC
   `).all(game.id, game.id) as Array<{ trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; liveError: string | null; raceColor: string | null; routeJson: string | null; betCount: number }>;
-  const snapshotRows = db.prepare(`SELECT journey_id AS journeyId, delay_minutes AS delayMinutes, recorded_at AS recordedAt
-    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - delaySnapshotRetentionMs).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
-  const snapshotsByJourney = new Map<string, Array<{ delayMinutes: number; recordedAt: string }>>();
-  for (const snapshot of snapshotRows) {
-    const history = snapshotsByJourney.get(snapshot.journeyId) ?? [];
-    history.push({ delayMinutes: snapshot.delayMinutes, recordedAt: snapshot.recordedAt });
-    snapshotsByJourney.set(snapshot.journeyId, history);
-  }
-  const entriesWithHistory = rows.map((entry) => ({ ...entry, stops: parseJourneyStops(entry.routeJson), delayHistory: snapshotsByJourney.get(entry.trainId) ?? [] }));
+  const snapshotsByJourney = getReplaySnapshots(game.id);
+  const entriesWithHistory = rows.map((entry) => ({ ...entry, stops: parseJourneyStops(entry.routeJson), delayHistory: snapshotsByJourney.get(entry.trainId) ?? [], replayHistory: snapshotsByJourney.get(entry.trainId) ?? [] }));
   const valid = (entry: typeof entriesWithHistory[number]) => entry.status !== "cancelled" && entry.status !== "waiting_for_departure" && entry.raceDelayMinutes !== null;
   entriesWithHistory.sort((left, right) => {
     const leftCancelled = left.status === "cancelled";
@@ -911,7 +961,11 @@ const getAdminDashboardSnapshot = (gameId?: string) => {
     ? "finished" as const
     : entries.some((entry) => entry.status === "in_progress" || entry.status === "arrived") ? "live" as const : "waiting" as const;
   const lastUpdatedAt = db.prepare("SELECT MAX(last_live_update) AS value FROM game_journeys WHERE game_id = ?").get(game.id) as { value: string | null };
-  return { state, game, entries, lastUpdatedAt: lastUpdatedAt.value, stale: entries.some((entry) => entry.stale) };
+  const responseEntries = entries.map((entry) => ({
+    ...entry,
+    delayHistory: entry.delayHistory.filter((snapshot) => snapshot.delayMinutes !== null).map((snapshot) => ({ delayMinutes: snapshot.delayMinutes as number, recordedAt: snapshot.recordedAt })),
+  }));
+  return { state, game, entries: responseEntries, lastUpdatedAt: lastUpdatedAt.value, stale: responseEntries.some((entry) => entry.stale) };
 };
 
 app.get<{ Params: { id: string } }>("/api/admin/games/:id/dashboard", async (request, reply) => {
@@ -1082,6 +1136,18 @@ const refreshGameProgress = async (game: GameRow) => {
         addLiveEvent(game.id, "provider_alert", { ...base, ...alert, message: alert.description ?? alert.title }, key, fetchedAt);
       }
     }
+    const snapshotInsert = db.prepare(`INSERT INTO journey_progress_snapshots
+      (game_id, journey_id, delay_minutes, current_delay_minutes, departure_delay_minutes, final_delay_minutes, status, actual_arrival, actual_departure, route_json, recorded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const currentRows = db.prepare(`SELECT id, current_delay_minutes AS currentDelayMinutes,
+      departure_delay_minutes AS departureDelayMinutes, final_delay_minutes AS finalDelayMinutes,
+      race_delay_minutes AS raceDelayMinutes, live_status AS status,
+      actual_arrival AS actualArrival, actual_departure AS actualDeparture, route_json AS routeJson
+      FROM game_journeys WHERE game_id = ? AND included = 1`).all(game.id) as Array<{
+        id: string; currentDelayMinutes: number | null; departureDelayMinutes: number | null; finalDelayMinutes: number | null;
+        raceDelayMinutes: number | null; status: string; actualArrival: string | null; actualDeparture: string | null; routeJson: string | null;
+      }>;
+    for (const row of currentRows) snapshotInsert.run(game.id, row.id, row.raceDelayMinutes, row.currentDelayMinutes, row.departureDelayMinutes, row.finalDelayMinutes, row.status, row.actualArrival, row.actualDeparture, row.routeJson, fetchedAt);
     const nextLeader = db.prepare(`SELECT id, display_name AS displayName FROM game_journeys WHERE game_id = ? AND included = 1 AND (live_status = 'cancelled' OR race_delay_minutes IS NOT NULL) ORDER BY CASE WHEN live_status = 'cancelled' THEN 0 ELSE 1 END, race_delay_minutes DESC, id ASC LIMIT 1`).get(game.id) as { id: string; displayName: string } | undefined;
     if (nextLeader && nextLeader.id !== previousLeader?.id) addLiveEvent(game.id, "new_leader", { trainId: nextLeader.id, displayName: nextLeader.displayName, title: eventPhrase("leader", nextLeader.displayName, `${game.id}:${nextLeader.id}`), message: "The delay race has a new front-runner.", severity: "warning", source: "generated" }, `${game.id}:leader:${nextLeader.id}`, fetchedAt);
     const nextRanks = db.prepare(`SELECT id, display_name AS displayName, race_delay_minutes AS delayMinutes, RANK() OVER (ORDER BY CASE WHEN live_status = 'cancelled' THEN 0 ELSE 1 END, race_delay_minutes DESC) AS position FROM game_journeys WHERE game_id = ? AND included = 1 AND (live_status = 'cancelled' OR race_delay_minutes IS NOT NULL)`).all(game.id) as Array<{ id: string; displayName: string; delayMinutes: number; position: number }>;
@@ -1107,7 +1173,6 @@ const refreshGameProgress = async (game: GameRow) => {
         addLiveEvent(game.id, "game_finished", { title: "The delay race is finished", message: "Every train has crossed the finish line. Time to count the damage.", severity: "info", source: "generated" }, `${game.id}:game_finished`, fetchedAt);
       }
     }
-    db.prepare("DELETE FROM journey_delay_snapshots WHERE recorded_at < ?").run(new Date(Date.parse(fetchedAt) - delaySnapshotRetentionMs).toISOString());
   })();
 };
 
@@ -1177,21 +1242,15 @@ app.get<{ Querystring: { gameId?: string } }>("/api/leaderboard", async (request
     LEFT JOIN participants p ON p.id = b.participant_id
     WHERE j.game_id = ? AND j.included = 1`)
     .all(game.id, game.id) as Array<{ participantId: string | null; username: string | null; trainId: string; displayName: string; origin: string; destination: string; scheduledDeparture: string; scheduledArrival: string; durationSeconds: number; stopCount: number | null; actualArrival: string | null; raceDelayMinutes: number | null; finalDelayMinutes: number | null; currentDelayMinutes: number | null; departureDelayMinutes: number | null; status: string; raceColor: string | null; routeJson: string | null }>;
-  const snapshotRows = db.prepare(`SELECT journey_id AS journeyId, delay_minutes AS delayMinutes, recorded_at AS recordedAt
-    FROM journey_delay_snapshots WHERE game_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC`).all(game.id, new Date(Date.now() - delaySnapshotRetentionMs).toISOString()) as Array<{ journeyId: string; delayMinutes: number; recordedAt: string }>;
-  const snapshotsByJourney = new Map<string, Array<{ delayMinutes: number; recordedAt: string }>>();
-  for (const snapshot of snapshotRows) {
-    const history = snapshotsByJourney.get(snapshot.journeyId) ?? [];
-    history.push({ delayMinutes: snapshot.delayMinutes, recordedAt: snapshot.recordedAt });
-    snapshotsByJourney.set(snapshot.journeyId, history);
-  }
+  const snapshotsByJourney = getReplaySnapshots(game.id);
   ranked.sort((a, b) => (b.raceDelayMinutes ?? -Infinity) - (a.raceDelayMinutes ?? -Infinity));
   const trains = [...new Map(ranked.map((entry) => [entry.trainId, {
     trainId: entry.trainId, displayName: entry.displayName, origin: entry.origin, destination: entry.destination,
     scheduledDeparture: entry.scheduledDeparture, scheduledArrival: entry.scheduledArrival, durationSeconds: entry.durationSeconds,
     stopCount: entry.stopCount, actualArrival: entry.actualArrival, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes, currentDelayMinutes: entry.currentDelayMinutes, departureDelayMinutes: entry.departureDelayMinutes, status: entry.status,
     raceColor: entry.raceColor, routeJson: entry.routeJson, stops: parseJourneyStops(entry.routeJson),
-    delayHistory: snapshotsByJourney.get(entry.trainId) ?? [],
+    delayHistory: (snapshotsByJourney.get(entry.trainId) ?? []).filter((snapshot) => snapshot.delayMinutes !== null).map((snapshot) => ({ delayMinutes: snapshot.delayMinutes as number, recordedAt: snapshot.recordedAt })),
+    replayHistory: snapshotsByJourney.get(entry.trainId) ?? [],
     bettors: [] as Array<{ participantId: string; username: string }>,
   }])).values()];
   for (const entry of ranked) if (entry.participantId && entry.username) trains.find((train) => train.trainId === entry.trainId)?.bettors.push({ participantId: entry.participantId, username: entry.username });

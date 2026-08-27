@@ -56,6 +56,8 @@ h3 { font-size: 1.1rem; line-height: 1.25; margin-bottom: var(--ds-space-2); }
 .train-map__event-popup small { color: #666; }
 .public-shell > .ds-card { display: flex; flex-direction: column; height: clamp(320px, 58vh, 840px); min-height: 0; overflow: hidden; }
 .public-shell > .ds-card { align-self: stretch; width: 100%; }
+.public-shell > .public-results-card { height: auto; overflow: visible; }
+.public-shell > .public-results-card > .leaderboard-view--results { flex: 0 0 auto; overflow: visible; }
 .public-shell > .ds-card > .view-tabs { flex-shrink: 0; }
 .public-shell > .ds-card > .progress-view, .public-shell > .ds-card > .leaderboard-view, .public-shell > .ds-card > .live-events-view, .public-shell > .ds-card > section[aria-label="Final results"] { flex: 1; min-height: 0; overflow-y: auto; }
 .public-shell > .ds-card > .race-chart-view { flex: 1; min-height: 0; overflow-y: auto; }
@@ -392,7 +394,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .view-tabs .ds-replay-badge { margin: 0; }
 .view-tabs .ds-badge-button.active { background: var(--ds-accent-blue); border: 1px solid var(--ds-border); box-shadow: none; color: #fff; height: 2.5rem; padding: 0 var(--ds-space-3); transform: none; }
 .view-tabs .results-tab.active { background: var(--chew-fill-yellow-primary); color: #111; }
-.view-tabs .results-tab { background: var(--chew-fill-yellow-primary); color: #111; }
+.view-tabs .results-tab { background: var(--chew-fill-yellow-primary); color: #111; margin-left: auto; }
 .admin-dashboard-shell { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; padding: clamp(.75rem, 2vw, 2rem); }
 .admin-dashboard-shell > .brand-header { flex: 0 0 auto; }
 .admin-dashboard-shell > .brand-header .brand-header__logo { height: clamp(2.5rem, 6vh, 3.5rem); width: clamp(2.5rem, 6vh, 3.5rem); }

@@ -647,6 +647,7 @@ function App() {
   }
 
   const liveStateVisible = hasConfirmedBet || bettingClosed;
+  const gameEnded = Boolean(game?.gameEndTime && Date.parse(game.gameEndTime) <= clockNow);
   const bettedEntries = leaderboard.filter((entry) => entry.bettors.length > 0);
   const publicReplayFrame = publicReplayActive ? publicReplayFrames[publicReplayIndex] : undefined;
   const replayBettedEntries = publicReplayFrame?.entries.filter((entry) => entry.bettors.length > 0);
@@ -671,16 +672,15 @@ function App() {
       {!betSubmitted && !bettingClosed && publicView === "browse" && !loading && !error && game && journeys.length > 0 ? <>
         <Card className="bet-card-only"><BetView {...betViewProps} cardsOnly /></Card>
         <BetView {...betViewProps} actionsOnly />
-      </> : <Card>
+      </> : <Card className={publicView === "results" ? "public-results-card" : ""}>
         <nav className="view-tabs" aria-label="Game views">
-          {hasConfirmedBet && <BadgeButton type="button" className={`results-tab ds-text-medium ${publicView === "results" ? "active" : ""}`.trim()} onClick={() => setPublicView("results")}>Results</BadgeButton>}
           {canShowRace && <BadgeButton type="button" className={`ds-text-medium ${publicView === "race" ? "active" : ""}`.trim()} onClick={() => setPublicView("race")}>Race</BadgeButton>}
           {!betSubmitted && !bettingClosed && <BadgeButton type="button" className={`ds-text-medium ${publicView === "browse" ? "active" : ""}`.trim()} onClick={() => setPublicView("browse")}>Bet</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
           {publicView === "race" && <ReplayBadge active={publicReplayActive} replayTimestamp={publicReplayFrame?.timestamp} onSkip={skipPublicReplay} />}
-          <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>
+          {gameEnded ? <BadgeButton type="button" className={`results-tab ds-text-medium ${publicView === "results" ? "active" : ""}`.trim()} onClick={() => setPublicView("results")}>Results</BadgeButton> : <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>}
         </nav>
         {hasConfirmedBet && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}
         {canShowRace && publicView === "race" && !loading && !error && <RaceChartView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} final={Boolean(results?.final && results.status !== "pending")} nextUpdateAt={nextProgressUpdateAt} updating={progressUpdating} replayEntries={replayBettedEntries} replayTimestamp={publicReplayFrame?.timestamp} onSelectTrain={selectTrain} onOpenBets={() => setPublicView("leaderboard")} />}

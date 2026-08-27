@@ -459,8 +459,14 @@ button:disabled { cursor: wait; opacity: .6; }
 .admin-dashboard__route { color: var(--ds-text-muted); font-size: clamp(.75rem, 1.8vh, 1.5rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-dashboard__status { color: var(--ds-text-muted); font-size: clamp(.7rem, 1.7vh, 1rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-dashboard__empty { color: var(--ds-text-muted); font-size: clamp(1.2rem, 2vw, 2rem); padding: 3rem 0; text-align: center; }
-.admin-dashboard > .race-stage { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
-.admin-dashboard > .race-stage > .admin-race-stage { flex: 1 1 auto; }
+.admin-dashboard__body { display: flex; flex: 1 1 auto; gap: var(--ds-space-4); min-height: 0; }
+.admin-dashboard__race { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.admin-dashboard__race > .race-stage { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.admin-dashboard__race > .race-stage > .admin-race-stage { flex: 1 1 auto; }
+.admin-dashboard__qr { align-items: center; background: var(--ds-surface-muted); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md); color: var(--ds-text-primary); display: flex; flex: 0 0 12rem; flex-direction: column; gap: var(--ds-space-2); justify-content: center; min-width: 0; padding: var(--ds-space-3); text-align: center; }
+.admin-dashboard__qr img { background: #fff; height: 10rem; image-rendering: pixelated; padding: .35rem; width: 10rem; }
+.admin-dashboard__qr a { color: var(--ds-text-muted); font-size: .7rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-dashboard .admin-race-row--has-trend { height: calc(var(--race-row-height) * .8); }
 .admin-race-axis { display: grid; flex: 0 0 auto; grid-template-columns: minmax(10rem, 22%) minmax(0, 1fr) minmax(3.75rem, 7%) minmax(9rem, 14%); margin-bottom: .25rem; }
 .admin-race-axis__ticks { border-bottom: 1px solid var(--ds-border); color: var(--ds-text-muted); height: 1.6rem; position: relative; }
 .admin-race-axis__ticks span { bottom: .2rem; position: absolute; transform: translateX(-50%); white-space: nowrap; }
@@ -524,6 +530,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .admin-game-actions { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ds-space-2); }
 .leaderboard-row__bet-count { flex: 0 0 auto; font-size: .7rem; padding: .2rem .35rem; }
 @media (max-width: 800px) { .admin-dashboard__list { grid-template-columns: 1fr; } }
+@media (max-width: 800px) { .admin-dashboard__body { flex-direction: column; } .admin-dashboard__qr { flex: 0 0 auto; order: -1; } }
 @media (max-width: 800px) { .admin-race-row, .admin-race-axis { grid-template-columns: minmax(7rem, 28%) minmax(0, 1fr) minmax(3rem, 16%); } .admin-race-row__status { display: none; } .admin-race-row--has-trend .admin-race-row__status { align-items: flex-start; display: flex; grid-column: 2; min-width: 0; text-align: left; } .admin-race-row__sparkline-wrap { flex-basis: 3rem; width: 3rem; } }
 @media (max-width: 800px) {
   .race-stage--public .admin-race-row__rank { min-width: 1.8rem; }

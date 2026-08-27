@@ -72,13 +72,14 @@ export function AdminDashboardView({ dashboard, nextUpdateAt }: { dashboard: Adm
   const visibleEntries = dashboard.entries;
   const totalBets = visibleEntries.reduce((total, entry) => total + entry.betCount, 0);
   const stageEntries = visibleEntries.map((entry) => ({ ...entry, raceDelayMinutes: entry.raceDelayMinutes, finalDelayMinutes: entry.finalDelayMinutes }));
+  const publicGameUrl = dashboard.game?.id ? `${window.location.origin}${import.meta.env.BASE_URL}game/${encodeURIComponent(dashboard.game.id)}` : null;
   return <section className="admin-dashboard" aria-label="Race dashboard">
     <header className="admin-dashboard__header">
       <div><h1>{dashboard.game?.name ?? "Race dashboard"}</h1></div>
       <div className="admin-dashboard__header-status">{finished ? <StatusBadge variant="muted">Finished</StatusBadge> : <><CountdownBadge label={countdownLabel} target={countdownTarget} variant={countdownLabel === "Ends in" ? "secondary" : "blue"} />{nextUpdateAt && <CountdownBadge label="Next update in" target={new Date(nextUpdateAt).toISOString()} variant="secondary" />}</>}</div>
     </header>
     <div className="admin-dashboard__meta"><span>{dashboard.entries.length} trains</span><span>{totalBets} 🎲</span><span>{dashboard.lastUpdatedAt ? `Updated ${new Date(dashboard.lastUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for live data"}</span>{dashboard.stale && <span className="admin-dashboard__stale">Live data may be stale</span>}</div>
-    <RaceStage entries={stageEntries} final={finished} animationDurationMs={4_000} />
+    <div className="admin-dashboard__body"><div className="admin-dashboard__race"><RaceStage entries={stageEntries} final={finished} animationDurationMs={4_000} /></div>{publicGameUrl && <aside className="admin-dashboard__qr" aria-label="Public game link"><strong>Join this game</strong><img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicGameUrl)}`} alt="QR code linking to the public game" /><a href={publicGameUrl}>{publicGameUrl}</a></aside>}</div>
   </section>;
 }
 

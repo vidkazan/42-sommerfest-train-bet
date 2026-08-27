@@ -552,6 +552,10 @@ button:disabled { cursor: wait; opacity: .6; }
 @media (max-width: 560px) { .train-detail-dialog { align-items: end; padding: 0; } .train-detail-dialog__panel { border-radius: var(--ds-radius-lg) var(--ds-radius-lg) 0 0; max-height: 88vh; } }
 @media (max-width: 799px) {
   .app-shell { gap: var(--ds-space-3); padding: var(--ds-space-2); }
+  .public-shell { max-width: 100%; overflow-x: hidden; }
+  .public-shell .brand-header { min-width: 0; padding-right: 8rem; }
+  .public-shell .brand-header__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .public-shell .public-help { max-width: 8rem; }
   .public-shell > .ds-card { padding: var(--ds-space-3); }
   .public-shell > section[aria-label="Train map"] { background: var(--ds-surface-page); padding-bottom: var(--ds-space-2); position: sticky; top: 0; z-index: 10; }
   .public-shell .train-map { height: clamp(100px, 12.75vh, 135px); }

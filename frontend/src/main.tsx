@@ -56,10 +56,6 @@ function buildReplayFrames<T extends ReplayableEntry>(entries: T[], from: number
     return snapshot ? { ...entry, raceDelayMinutes: snapshot.delayMinutes, currentDelayMinutes: snapshot.currentDelayMinutes, finalDelayMinutes: snapshot.finalDelayMinutes, status: snapshot.status, actualArrival: snapshot.actualArrival, actualDeparture: snapshot.actualDeparture, routeJson: snapshot.routeJson ?? entry.routeJson, delayHistory: replayDelayHistory } : { ...entry, raceDelayMinutes: null, currentDelayMinutes: null, finalDelayMinutes: null, status: "waiting_for_departure", delayHistory: replayDelayHistory };
   }) }));
 }
-function earliestReplayTimestamp<T extends ReplayableEntry>(entries: T[], fallback: number) {
-  const timestamps = entries.flatMap((entry) => (entry.replayHistory ?? entry.delayHistory ?? []).map((snapshot) => Date.parse(snapshot.recordedAt)).filter((timestamp) => Number.isFinite(timestamp)));
-  return timestamps.length > 0 ? Math.min(...timestamps) : fallback;
-}
 type GameCreationDraft = {
   gameName: string;
   eventDate: string;
@@ -348,15 +344,6 @@ function App() {
     if (publicGameId && latestPublicTimestampRef.current) storeTimestamp(`choochoo-race-last-viewed:${publicGameId}`, latestPublicTimestampRef.current);
     setNextProgressUpdateAt(Date.now() + 60_000);
     void loadProgressRef.current?.();
-  };
-
-  const startPublicReplay = () => {
-    if (publicReplayActiveRef.current || leaderboard.length === 0) return;
-    const latestTimestamp = latestPublicTimestampRef.current ?? Date.now();
-    const firstTimestamp = earliestReplayTimestamp(leaderboard, latestTimestamp);
-    const frames = buildReplayFrames(leaderboard, firstTimestamp - 1, latestTimestamp);
-    if (frames.length === 0) return;
-    publicReplayActiveRef.current = true; setPublicReplayFrames(frames); setPublicReplayIndex(0); setPublicReplayRemainingSeconds(frames.length); setPublicReplayActive(true); setNextProgressUpdateAt(null);
   };
 
   useEffect(() => {
@@ -691,7 +678,7 @@ function App() {
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "progress" ? "active" : ""}`.trim()} onClick={() => setPublicView("progress")}>Progress</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "leaderboard" ? "active" : ""}`.trim()} onClick={() => setPublicView("leaderboard")}>Bets</BadgeButton>}
           {hasConfirmedBet && <BadgeButton type="button" className={`ds-text-medium ${publicView === "events" ? "active" : ""}`.trim()} onClick={() => setPublicView("events")}>Events</BadgeButton>}
-          <ReplayBadge active={publicReplayActive} replayTimestamp={publicReplayFrame?.timestamp} onReplay={startPublicReplay} onSkip={skipPublicReplay} />
+          <ReplayBadge active={publicReplayActive} replayTimestamp={publicReplayFrame?.timestamp} onSkip={skipPublicReplay} />
           <Badge variant="secondary" className="view-tabs__end-time">Ends {formatGameEndTime(game?.gameEndTime)}</Badge>
         </nav>
         {hasConfirmedBet && publicView === "progress" && !loading && !error && <LiveLeaderboardView entries={bettedEntries} journeys={journeys} currentParticipantId={storedUserId} selectedTrainId={selectedTrainId} onSelectTrain={selectTrain} lastUpdatedAt={leaderboardUpdatedAt} stale={leaderboardStale} />}

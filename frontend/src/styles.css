@@ -485,7 +485,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .race-chart-view .race-stage--public .admin-race-axis__ticks { width: 100%; }
   .race-chart-view .race-stage--public .admin-race-stage { --race-row-height-base: 4.5rem; --race-row-height: 4.5rem; min-width: 0; }
   .race-chart-view .race-stage--public .admin-race-stage { --race-row-height: 5.4rem; }
-  .race-chart-view .race-stage--public .admin-race-row { align-content: center; column-gap: var(--ds-space-2); grid-template-columns: minmax(0, 1fr) 3rem; grid-template-areas: "identity sparkline" "track track" "status status"; min-width: 0; padding: .35rem 0; row-gap: .2rem; }
+  .race-chart-view .race-stage--public .admin-race-row { align-content: center; column-gap: var(--ds-space-2); grid-template-columns: minmax(0, 1fr) 3rem; grid-template-areas: "identity sparkline" "track track" "status status"; min-width: 0; padding: .35rem 0; row-gap: .5rem; }
   .race-chart-view .race-stage--public .admin-race-row__identity { grid-area: identity; min-width: 0; overflow: hidden; }
   .race-chart-view .race-stage--public .admin-race-row__identity .ds-train-label-button,
   .race-chart-view .race-stage--public .admin-race-row__identity .ds-train-label { max-width: 100%; min-width: 0; }

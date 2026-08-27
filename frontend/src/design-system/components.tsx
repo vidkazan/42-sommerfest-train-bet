@@ -22,9 +22,10 @@ export function Badge({ children, variant = "primary", gradient, className = "",
 export function BadgeButton({ children, className = "", ...props }: { children: ReactNode; className?: string } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button className={`ds-badge ds-badge-button ${className}`.trim()} {...props}>{children}</button>;
 }
-export function ReplayBadge({ active = false, replayTimestamp, onReplay, onSkip }: { active?: boolean; replayTimestamp?: number; onReplay: () => void; onSkip: () => void }) {
+export function ReplayBadge({ active = false, replayTimestamp, onSkip }: { active?: boolean; replayTimestamp?: number; onSkip: () => void }) {
   const replayTime = replayTimestamp === undefined ? null : new Date(replayTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return <Badge variant="yellow" className="ds-replay-badge">{active && replayTime ? <span className="ds-replay-badge__time" key={replayTimestamp} role="status">Replay {replayTime}</span> : <button type="button" className="ds-replay-badge__launch" onClick={onReplay}>Replay</button>}<button type="button" className="ds-replay-badge__close" onClick={onSkip} aria-label="Skip replay">×</button></Badge>;
+  if (!active || !replayTime) return null;
+  return <Badge variant="yellow" className="ds-replay-badge"><span className="ds-replay-badge__time" key={replayTimestamp} role="status">Replay {replayTime}</span><button type="button" className="ds-replay-badge__close" onClick={onSkip} aria-label="Skip replay">×</button></Badge>;
 }
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`ds-card ${className}`.trim()}>{children}</section>;

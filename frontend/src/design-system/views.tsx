@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import type { AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, ReplaySnapshot, SkippedDisruption, Station } from "../api/client";
+import type { ActiveGame, AdminDashboard, Game, Journey, LiveEvent, LiveStop, MapEvent, ReplaySnapshot, SkippedDisruption, Station } from "../api/client";
 import { colors } from "./tokens";
 import { Badge, BadgeButton, Button, DelayBadge, Notice, ReplayBadge, StatusBadge, TrainIcon } from "./components";
 import { TimeLabelView } from "./TimeLabelView";
@@ -119,6 +119,24 @@ export function PlayerOnboarding({ open, onClose }: { open: boolean; onClose: ()
 
 export function BrandHeader({ logoSrc }: BrandHeaderProps) {
   return <header className="brand-header"><img src={logoSrc} alt="" className="brand-header__logo" /><span className="brand-header__name">ChooChoo Delay Race</span></header>;
+}
+
+export function HomeView({ games, loading, error }: { games: ActiveGame[]; loading: boolean; error: string | null }) {
+  return <>
+    <section className="home-hero"><h1>Pick a train. Watch the race.</h1><p>ChooChoo Delay Race is a live multiplayer game: bet on a journey, follow its delay, and see who picked the train with the biggest delay at its final stop.</p></section>
+    <section className="home-how" aria-labelledby="how-to-play-title"><h2 id="how-to-play-title">How to play</h2><div className="home-steps"><article><span>1</span><h3>Choose a train</h3><p>Browse the journeys and place one bet with your name.</p></article><article><span>2</span><h3>Follow the race</h3><p>Watch live updates, rank changes, stations, and delay trends.</p></article><article><span>3</span><h3>See the results</h3><p>When the game ends, the biggest final delay wins.</p></article></div></section>
+    <section className="home-previews" aria-labelledby="game-views-title"><h2 id="game-views-title">Inside the game</h2><div className="home-preview-grid">
+      <article className="home-preview"><h3>Bet</h3><div className="home-preview__sample"><strong>Choose your train</strong><div><span>🎭 RE3</span><em>→ Mainz</em><b>Pick</b></div><div><span>🦝 RE50</span><em>→ Frankfurt</em><b>Picked</b></div></div><p>Pick a journey before the race begins.</p></article>
+      <article className="home-preview"><h3>Dashboard</h3><div className="home-preview__sample home-preview__dashboard"><strong>Live delay race</strong><div><span>🥇 RE4</span><i style={{ width: "78%" }} /></div><div><span>🥈 RE3</span><i style={{ width: "52%" }} /></div><div><span>🥉 RB26</span><i style={{ width: "31%" }} /></div></div><p>Follow every train and its delay trend.</p></article>
+      <article className="home-preview"><h3>Leaderboard</h3><div className="home-preview__sample home-preview__leaderboard"><strong>Final standings</strong><div className="home-preview__podium"><div className="home-preview__podium-place home-preview__podium-place--2"><span>🎭 RE3</span><em>+12 min</em><b>2</b></div><div className="home-preview__podium-place home-preview__podium-place--1"><span>🚄 RE4</span><em>+18 min</em><b>1</b></div><div className="home-preview__podium-place home-preview__podium-place--3"><span>🦝 RB26</span><em>+7 min</em><b>3</b></div></div></div><p>See the winners and everyone who bet.</p></article>
+    </div></section>
+    <section className="card home-games" aria-labelledby="active-games-title"><h2 id="active-games-title">Active games</h2>
+      {loading && <p role="status">Loading active games…</p>}
+      {error && <p role="alert">Could not load active games.</p>}
+      {!loading && !error && games.length === 0 && <p>No active games right now.</p>}
+      {!loading && !error && games.length > 0 && <div className="home-games__list">{games.map((game) => <a className="home-game" href={`${import.meta.env.BASE_URL}game/${encodeURIComponent(game.id)}`} key={game.id}><strong>{game.name}</strong><span>{game.eventDate}{game.gameEndTime ? ` · Ends ${new Date(game.gameEndTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</span><span>Open game →</span></a>)}</div>}
+    </section>
+  </>;
 }
 
 export function BetView({ journeys, selectedTrainId, username, betSubmitted, loading, error, usernameCheckLoading, usernameCheckError, onSelectTrain, onUsernameChange, onCheckUsername, onSubmit, cardsOnly = false, actionsOnly = false }: BetViewProps) {

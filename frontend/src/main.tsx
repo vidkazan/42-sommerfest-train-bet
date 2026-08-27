@@ -1,12 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
-import { api, type AdminDashboard, type Game, type Journey, type LiveEvent, type ReplaySnapshot, type Station } from "./api/client";
-import { AdminAccessView, AdminActiveView, AdminDashboardView, AdminGameListView, AdminReviewView, AdminSetupView, Badge, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, PlayerOnboarding, RaceChartView, ReplayBadge, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
+import { api, type ActiveGame, type AdminDashboard, type Game, type Journey, type LiveEvent, type ReplaySnapshot, type Station } from "./api/client";
+import { AdminAccessView, AdminActiveView, AdminDashboardView, AdminGameListView, AdminReviewView, AdminSetupView, Badge, BadgeButton, BetView, Button, Card, BrandHeader, GameHeader, HomeView, LeaderboardView, LiveEventsView, LiveLeaderboardView, Notice, PlayerOnboarding, RaceChartView, ReplayBadge, TimeLabelView, TrainIcon, TrainMapView, type LiveLeaderboardEntry, type PublicView } from "./design-system";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
-type AppMode = "public" | "admin" | "not-found";
+type AppMode = "home" | "public" | "admin" | "not-found";
 type AdminView = "access" | "create" | "review" | "active" | "dashboard";
 
 const formatLocalDate = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -85,7 +85,7 @@ function App() {
     : window.location.pathname;
   const gamePathMatch = pathWithoutBase.match(/^\/game\/([^/]+)\/?$/);
   const publicGameId = gamePathMatch?.[1] ?? null;
-  const mode: AppMode = pathWithoutBase === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
+  const mode: AppMode = pathWithoutBase === "/" ? "home" : pathWithoutBase === "/admin" ? "admin" : publicGameId ? "public" : "not-found";
   const [publicView, setPublicView] = useState<PublicView>("browse");
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [adminView, setAdminView] = useState<AdminView>("access");
@@ -128,6 +128,14 @@ function App() {
   const [skippedDisruptions, setSkippedDisruptions] = useState<Array<{ key: string; reason: string }>>([]);
   const [disruptionMessage, setDisruptionMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeGames, setActiveGames] = useState<ActiveGame[]>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
+  const [homeError, setHomeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== "home") return;
+    api.listActiveGames().then((result) => setActiveGames(result.games)).catch((reason: unknown) => setHomeError(reason instanceof Error ? reason.message : "Could not load active games")).finally(() => setHomeLoading(false));
+  }, [mode]);
   const [error, setError] = useState<string | null>(null);
 
   const updateStationSelection = (station: Station, selected: boolean) => {
@@ -614,6 +622,10 @@ function App() {
       setAdminLoading(false);
     }
   };
+
+  if (mode === "home") {
+    return <main className="app-shell home-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><HomeView games={activeGames} loading={homeLoading} error={homeError} /></main>;
+  }
 
   if (mode === "not-found") {
     return <main className="app-shell"><BrandHeader logoSrc={`${import.meta.env.BASE_URL}choochoo-logo.png`} /><section className="card"><h1>Game not found</h1><p>Open a game using its shared game link.</p></section></main>;

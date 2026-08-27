@@ -1018,6 +1018,18 @@ const getMapEvents = (gameId: string): MapEvent[] => db.prepare(`
   FROM game_map_events WHERE game_id = ? ORDER BY starts_at ASC, id ASC
 `).all(gameId) as MapEvent[];
 
+app.get("/api/games", async () => {
+  const games = db.prepare(`
+    SELECT id, name, event_date AS eventDate, timezone,
+      betting_start AS bettingStart, betting_end AS bettingEnd,
+      calculated_game_end_time AS gameEndTime, status
+    FROM games
+    WHERE status = 'active'
+    ORDER BY calculated_game_end_time ASC, created_at DESC
+  `).all();
+  return { games };
+});
+
 app.get<{ Params: { id: string } }>("/api/games/:id", async (request, reply) => {
   const game = getPublicGame(request.params.id);
   if (!game) return reply.code(404).send({ error: "GAME_NOT_FOUND" });
